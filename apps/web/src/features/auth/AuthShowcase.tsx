@@ -163,10 +163,6 @@ export function AuthShowcase() {
           </div>
         </div>
       </div>
-
-      <p className="relative mt-8 text-[12px] text-white/35">
-        Imagem ilustrativa com dados de exemplo.
-      </p>
     </div>
   );
 }
