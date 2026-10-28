@@ -7,18 +7,24 @@ export function Field({
   hint,
   children,
   htmlFor,
+  labelAside,
 }: {
   label: string;
   error?: string;
   hint?: ReactNode;
   children: ReactNode;
   htmlFor?: string;
+  /** Conteúdo à direita do rótulo (ex.: atalho para criar um item). */
+  labelAside?: ReactNode;
 }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <label htmlFor={htmlFor} className="text-sm font-medium text-graphite">
-        {label}
-      </label>
+      <div className="flex items-baseline justify-between gap-3">
+        <label htmlFor={htmlFor} className="text-sm font-medium text-graphite">
+          {label}
+        </label>
+        {labelAside}
+      </div>
       {children}
       {error ? (
         <p className="text-[13px] text-negative">{error}</p>
@@ -72,7 +78,7 @@ const brl = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFr
 /**
  * Campo de valor em reais. Digita-se só números (como no app do banco):
  * "123456" vira R$ 1.234,56. O valor é sempre um inteiro em centavos.
- * Com allowNegative, o "-" alterna o sinal.
+ * Com allowNegative, o "-" alterna o sinal. O tamanho lg destaca o valor no topo de formulários.
  */
 export function CurrencyInput({
   value,
@@ -80,12 +86,14 @@ export function CurrencyInput({
   allowNegative = false,
   error,
   id,
+  size = 'md',
   ...props
-}: Omit<ComponentProps<'input'>, 'value' | 'onChange' | 'type'> & {
+}: Omit<ComponentProps<'input'>, 'value' | 'onChange' | 'type' | 'size'> & {
   value: number | null | undefined;
   onChange: (cents: number) => void;
   allowNegative?: boolean;
   error?: string;
+  size?: 'md' | 'lg';
 }) {
   const fallbackId = useId();
   const cents = value ?? 0;
@@ -93,7 +101,11 @@ export function CurrencyInput({
 
   return (
     <div className="relative">
-      <span className="pointer-events-none absolute top-1/2 left-4 -translate-y-1/2 text-[15px] text-slate">
+      <span
+        className={`pointer-events-none absolute top-1/2 left-4 -translate-y-1/2 text-slate ${
+          size === 'lg' ? 'text-lg' : 'text-[15px]'
+        }`}
+      >
         R$
       </span>
       <input
@@ -114,7 +126,11 @@ export function CurrencyInput({
             onChange(-cents);
           }
         }}
-        className={`${controlClass(error)} tabular pl-11 text-right`}
+        className={`${controlClass(error)} tabular text-right ${
+          size === 'lg'
+            ? '!h-16 pl-14 font-display !text-[30px] font-semibold tracking-[-0.02em]'
+            : 'pl-11'
+        }`}
         {...props}
       />
     </div>
@@ -127,12 +143,14 @@ export function Switch({
   label,
   description,
   id,
+  disabled,
 }: {
   checked: boolean;
   onChange: (checked: boolean) => void;
   label: string;
   description?: string;
   id?: string;
+  disabled?: boolean;
 }) {
   const fallbackId = useId();
   const switchId = id ?? fallbackId;
@@ -149,8 +167,9 @@ export function Switch({
         type="button"
         role="switch"
         aria-checked={checked}
+        disabled={disabled}
         onClick={() => onChange(!checked)}
-        className={`relative mt-0.5 h-6 w-11 shrink-0 rounded-full transition-colors ${
+        className={`relative mt-0.5 h-6 w-11 shrink-0 rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
           checked ? 'bg-ember' : 'bg-line-strong'
         }`}
       >

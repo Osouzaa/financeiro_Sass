@@ -12,6 +12,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { useState } from 'react';
+import { Link } from 'react-router';
 import { Button } from '@/components/form';
 import { Switch } from '@/components/inputs';
 import { Modal } from '@/components/Modal';
@@ -276,6 +277,12 @@ function CashAccountCard({
         Saldo inicial de {formatBRL(account.initialBalanceCents)} em{' '}
         {shortDate(account.initialBalanceDate)}
       </p>
+      <Link
+        to={`/lancamentos?conta=${account.id}`}
+        className="link-ember mt-3 inline-block text-sm"
+      >
+        Ver lançamentos
+      </Link>
     </article>
   );
 }
@@ -364,6 +371,9 @@ function CreditCardTile({
             <dd className="truncate">{payer?.name ?? 'Não definido'}</dd>
           </div>
         </dl>
+        <Link to={`/faturas?cartao=${account.id}`} className="link-ember inline-block text-sm">
+          Ver faturas
+        </Link>
       </div>
     </article>
   );

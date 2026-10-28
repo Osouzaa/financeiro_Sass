@@ -1,5 +1,10 @@
-import { formatBRL, type CategoryDto } from '@financeiro/shared';
-import { useQuery } from '@tanstack/react-query';
+import {
+  addDays,
+  formatBRL,
+  monthBounds,
+  todayIso,
+  type TransactionSummaryDto,
+} from '@financeiro/shared';
 import {
   ArrowDownLeft,
   ArrowUpRight,
@@ -9,37 +14,25 @@ import {
   Landmark,
   Plus,
   type LucideIcon,
+  CircleAlert,
 } from 'lucide-react';
 import { Link } from 'react-router';
-import {
-  Area,
-  AreaChart,
-  CartesianGrid,
-  Cell,
-  Pie,
-  PieChart,
-  ResponsiveContainer,
-  XAxis,
-  YAxis,
-} from 'recharts';
+import { Cell, Pie, PieChart, ResponsiveContainer } from 'recharts';
 import { useAuth } from '@/features/auth/auth-context';
+import { useBudgetMonth } from '@/features/budget/budget-api';
+import { ProjectionChart } from '@/features/projection/ProjectionChart';
+import { useProjection } from '@/features/projection/projection-api';
 import { PageHeader } from '@/layout/AppLayout';
 import { useAccounts } from '@/features/accounts/account-meta';
-import { api } from '@/lib/api';
+import { categoryIcon } from '@/features/categories/category-icons';
+import { useInvoices } from '@/features/invoices/invoice-api';
+import { useRecurrences } from '@/features/recurrences/recurrence-api';
+import { useTransactions } from '@/features/transactions/transaction-api';
+import { formatShortDate } from '@/lib/dates';
 
 const monthLabel = new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'numeric' }).format(
   new Date(),
 );
-
-/** Curva ilustrativa exibida esmaecida enquanto não há lançamentos. */
-const SAMPLE_PROJECTION = Array.from({ length: 31 }, (_, index) => {
-  const day = index + 1;
-  const salary = day >= 5 ? 6200 : 0;
-  const invoice = day >= 10 ? -2300 : 0;
-  const rent = day >= 5 ? -1850 : 0;
-  const daily = -day * 48;
-  return { day, value: 3400 + salary + invoice + rent + daily };
-});
 
 const FIRST_STEPS = [
   { title: 'Cadastre suas contas e cartões', to: '/contas' },
@@ -52,12 +45,19 @@ export function DashboardPage() {
   const { user } = useAuth();
   const firstName = user?.name.split(' ')[0];
   const { data: accounts = [] } = useAccounts();
+  const { data: month } = useTransactions(monthBounds(todayIso().slice(0, 7)));
+  const summary = month?.summary;
+  const hasTransactions = (month?.items.length ?? 0) > 0;
+  const { data: recurrences = [] } = useRecurrences();
+  const { data: budget } = useBudgetMonth(todayIso().slice(0, 7));
 
   const cash = accounts.filter((a) => a.type !== 'CREDIT_CARD');
   const cards = accounts.filter((a) => a.type === 'CREDIT_CARD');
   const balance = cash.reduce((sum, a) => sum + a.balanceCents, 0);
   const owed = cards.reduce((sum, a) => sum + a.balanceCents, 0);
   const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+  const plannedNote = (planned: number, fallback: string) =>
+    planned > 0 ? `${formatBRL(planned)} ainda previsto` : fallback;
 
   return (
     <>
@@ -66,7 +66,7 @@ export function DashboardPage() {
         description={`Resumo de ${monthLabel}.`}
         actions={
           <Link
-            to="/lancamentos"
+            to="/lancamentos?novo=despesa"
             className="inline-flex h-10 items-center gap-2 rounded-[10px] bg-graphite px-4 text-sm font-medium text-white transition-colors hover:bg-black"
           >
             <Plus size={18} aria-hidden="true" /> Novo lançamento
@@ -89,33 +89,40 @@ export function DashboardPage() {
         <StatCard
           icon={ArrowDownLeft}
           label="Receitas do mês"
-          value={0}
-          note="Realizado + previsto"
+          value={summary?.incomeCents ?? 0}
+          note={plannedNote(summary?.plannedIncomeCents ?? 0, 'Realizado + previsto')}
           tone="positive"
+          to="/lancamentos?tipo=INCOME"
         />
         <StatCard
           icon={ArrowUpRight}
           label="Despesas do mês"
-          value={0}
-          note="Por data da compra"
+          value={summary?.expenseCents ?? 0}
+          note={plannedNote(summary?.plannedExpenseCents ?? 0, 'Por data da compra')}
           tone="negative"
+          to="/lancamentos?tipo=EXPENSE"
         />
         <StatCard
           icon={CreditCard}
           label="Faturas em aberto"
           value={owed}
           note={cards.length ? `Em ${plural(cards.length, 'cartão', 'cartões')}` : 'Nenhum cartão'}
-          to="/contas"
+          to={cards.length ? '/faturas' : '/contas'}
         />
       </section>
 
       <div className="mt-4 grid gap-4 xl:grid-cols-3">
         <ProjectionCard hasAccounts={accounts.length > 0} />
-        <FirstStepsCard hasAccounts={accounts.length > 0} />
+        <FirstStepsCard
+          hasAccounts={accounts.length > 0}
+          hasRecurrences={recurrences.length > 0}
+          hasTransactions={hasTransactions}
+          hasBudget={(budget?.items.length ?? 0) > 0}
+        />
       </div>
 
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
-        <CategoriesCard />
+        <CategoriesCard summary={summary} />
         <UpcomingCard />
       </div>
     </>
@@ -171,6 +178,9 @@ function StatCard({
 }
 
 function ProjectionCard({ hasAccounts }: { hasAccounts: boolean }) {
+  const { data: projection } = useProjection(30);
+  const hasMovement = (projection?.events.length ?? 0) > 0;
+
   return (
     <section
       aria-labelledby="titulo-projecao"
@@ -181,69 +191,90 @@ function ProjectionCard({ hasAccounts }: { hasAccounts: boolean }) {
           <h2 id="titulo-projecao" className="text-lg font-semibold">
             Projeção de saldo
           </h2>
-          <p className="text-sm text-slate">Saldo previsto dia a dia até o fim do mês</p>
+          <p className="text-sm text-slate">Saldo previsto dia a dia nos próximos 30 dias</p>
         </div>
-        <span className="rounded-full border border-line bg-sunken px-2.5 py-1 text-[12px] text-slate">
-          Exemplo
-        </span>
+        <Link to="/projecao" className="link-ember text-sm">
+          Ver projeção completa
+        </Link>
       </div>
 
-      <div className="mt-6 h-[260px] opacity-35 saturate-50" aria-hidden="true">
-        <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={SAMPLE_PROJECTION} margin={{ top: 8, right: 8, bottom: 0, left: -8 }}>
-            <defs>
-              <linearGradient id="dash-projection" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#ff682c" stopOpacity={0.3} />
-                <stop offset="100%" stopColor="#ff682c" stopOpacity={0} />
-              </linearGradient>
-            </defs>
-            <CartesianGrid stroke="#e7e4de" vertical={false} />
-            <XAxis
-              dataKey="day"
-              tickLine={false}
-              axisLine={false}
-              tick={{ fontSize: 12, fill: '#7a7a80' }}
-              interval={4}
+      {projection && hasAccounts ? (
+        <>
+          <dl className="mt-5 grid grid-cols-3 gap-3">
+            <ProjectionFigure label="Hoje" value={projection.startBalanceCents} />
+            <ProjectionFigure
+              label={`Em ${formatShortDate(projection.to)}`}
+              value={projection.endBalanceCents}
             />
-            <YAxis
-              tickLine={false}
-              axisLine={false}
-              tick={{ fontSize: 12, fill: '#7a7a80' }}
-              tickFormatter={(v: number) => `${Math.round(v / 1000)}k`}
-              width={40}
+            <ProjectionFigure
+              label={`Menor · ${formatShortDate(projection.lowest.date)}`}
+              value={projection.lowest.balanceCents}
             />
-            <Area
-              type="monotone"
-              dataKey="value"
-              stroke="#ff682c"
-              strokeWidth={2}
-              fill="url(#dash-projection)"
-              isAnimationActive={false}
-            />
-          </AreaChart>
-        </ResponsiveContainer>
-      </div>
-
-      <div className="absolute inset-x-6 top-1/2 mx-auto mt-4 max-w-sm -translate-y-1/2 rounded-[14px] border border-line bg-surface/95 p-5 text-center backdrop-blur-sm">
-        <p className="font-semibold">Sua projeção aparece aqui</p>
-        <p className="mt-1 text-sm text-slate">
-          {hasAccounts
-            ? 'Suas contas já estão cadastradas. A projeção começa a ser calculada com os lançamentos e recorrências, que entram na próxima etapa.'
-            : 'Cadastre uma conta e suas recorrências para ver quanto vai sobrar no fim do mês.'}
-        </p>
-        {!hasAccounts ? (
-          <Link to="/contas" className="link-ember mt-3 inline-block text-sm">
-            Cadastrar primeira conta
-          </Link>
-        ) : null}
-      </div>
+          </dl>
+          {projection.firstNegativeDate ? (
+            <p
+              role="status"
+              className="mt-4 flex items-center gap-2 rounded-[10px] bg-negative-soft px-3 py-2 text-sm text-negative"
+            >
+              <CircleAlert size={16} aria-hidden="true" />O saldo fica negativo em{' '}
+              {formatShortDate(projection.firstNegativeDate)}.
+            </p>
+          ) : null}
+          <div className="mt-4">
+            <ProjectionChart projection={projection} height={220} />
+          </div>
+          {!hasMovement ? (
+            <p className="mt-2 text-center text-sm text-slate">
+              Sem nada previsto: cadastre{' '}
+              <Link to="/recorrencias" className="link-ember">
+                recorrências
+              </Link>{' '}
+              para a curva ganhar forma.
+            </p>
+          ) : null}
+        </>
+      ) : (
+        <div className="mt-6 grid h-[260px] place-items-center rounded-[12px] border border-dashed border-line-strong text-center">
+          <div className="max-w-sm px-6">
+            <p className="font-semibold">Sua projeção aparece aqui</p>
+            <p className="mt-1 text-sm text-slate">
+              Cadastre uma conta e suas recorrências para ver quanto vai sobrar no fim do mês.
+            </p>
+            <Link to="/contas" className="link-ember mt-3 inline-block text-sm">
+              Cadastrar primeira conta
+            </Link>
+          </div>
+        </div>
+      )}
     </section>
   );
 }
 
-function FirstStepsCard({ hasAccounts }: { hasAccounts: boolean }) {
-  // Os demais passos são marcados conforme os módulos de lançamentos e orçamento entrarem
-  const completed = [hasAccounts, false, false, false];
+function ProjectionFigure({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-[12px] bg-canvas px-3 py-2.5">
+      <dt className="truncate text-[12px] text-slate">{label}</dt>
+      <dd
+        className={`tabular font-display text-lg font-semibold sm:text-xl ${value < 0 ? 'text-negative' : ''}`}
+      >
+        {formatBRL(value)}
+      </dd>
+    </div>
+  );
+}
+
+function FirstStepsCard({
+  hasAccounts,
+  hasRecurrences,
+  hasTransactions,
+  hasBudget,
+}: {
+  hasAccounts: boolean;
+  hasRecurrences: boolean;
+  hasTransactions: boolean;
+  hasBudget: boolean;
+}) {
+  const completed = [hasAccounts, hasRecurrences, hasTransactions, hasBudget];
   const done = completed.filter(Boolean).length;
   return (
     <section aria-labelledby="titulo-passos" className="card p-6">
@@ -280,12 +311,23 @@ function FirstStepsCard({ hasAccounts }: { hasAccounts: boolean }) {
   );
 }
 
-function CategoriesCard() {
-  const { data } = useQuery({
-    queryKey: ['categories'],
-    queryFn: () => api<CategoryDto[]>('/categories'),
-  });
-  const expenses = (data ?? []).filter((c) => c.type === 'EXPENSE').slice(0, 5);
+function CategoriesCard({ summary }: { summary?: TransactionSummaryDto }) {
+  const all = summary?.expensesByCategory ?? [];
+  const top = all.slice(0, 5);
+  const rest = all.slice(5).reduce((sum, category) => sum + category.totalCents, 0);
+  const slices = [
+    ...top.map((category) => ({
+      key: category.categoryId,
+      name: category.name,
+      icon: category.icon,
+      color: category.color ?? '#a3a3a8',
+      value: category.totalCents,
+    })),
+    ...(rest > 0
+      ? [{ key: 'outras', name: 'Outras', icon: null, color: '#d4d0c8', value: rest }]
+      : []),
+  ];
+  const total = summary?.expenseCents ?? 0;
 
   return (
     <section aria-labelledby="titulo-categorias" className="card p-6">
@@ -296,8 +338,8 @@ function CategoriesCard() {
           </h2>
           <p className="text-sm text-slate">Distribuição das despesas do mês</p>
         </div>
-        <Link to="/configuracoes/categorias" className="link-ember text-sm">
-          Ver categorias
+        <Link to="/lancamentos?tipo=EXPENSE" className="link-ember text-sm">
+          Ver despesas
         </Link>
       </div>
 
@@ -306,59 +348,183 @@ function CategoriesCard() {
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
               <Pie
-                data={[{ value: 1 }]}
+                data={slices.length ? slices : [{ key: 'vazio', value: 1, color: '#f1efea' }]}
                 dataKey="value"
+                nameKey="key"
                 innerRadius={56}
                 outerRadius={76}
+                paddingAngle={slices.length > 1 ? 2 : 0}
                 stroke="none"
                 isAnimationActive={false}
               >
-                <Cell fill="#f1efea" />
+                {(slices.length ? slices : [{ key: 'vazio', color: '#f1efea' }]).map((slice) => (
+                  <Cell key={slice.key} fill={slice.color} />
+                ))}
               </Pie>
             </PieChart>
           </ResponsiveContainer>
           <div className="absolute inset-0 grid place-items-center text-center">
             <div>
-              <p className="tabular font-display text-lg font-semibold">{formatBRL(0)}</p>
+              <p className="tabular font-display text-lg font-semibold">{formatBRL(total)}</p>
               <p className="text-[12px] text-faint">no mês</p>
             </div>
           </div>
         </div>
-        <ul className="w-full flex-1 divide-y divide-line">
-          {expenses.map((category) => (
-            <li key={category.id} className="flex items-center gap-3 py-2.5 text-sm">
-              <span
-                className="size-2.5 rounded-full"
-                style={{ background: category.color ?? '#a3a3a8' }}
-                aria-hidden="true"
-              />
-              <span className="flex-1">{category.name}</span>
-              <span className="tabular text-slate">{formatBRL(0)}</span>
-            </li>
-          ))}
-        </ul>
+        {slices.length === 0 ? (
+          <p className="flex-1 text-center text-sm text-slate sm:text-left">
+            Quando você lançar despesas, a distribuição por categoria aparece aqui.
+          </p>
+        ) : (
+          <ul className="w-full flex-1 divide-y divide-line">
+            {slices.map((slice) => {
+              const Icon = categoryIcon(slice.icon);
+              return (
+                <li key={slice.key} className="flex items-center gap-3 py-2.5 text-sm">
+                  <span
+                    className="grid size-6 place-items-center rounded-full"
+                    style={{ background: `${slice.color}22`, color: slice.color }}
+                    aria-hidden="true"
+                  >
+                    <Icon size={13} />
+                  </span>
+                  <span className="flex-1 truncate">{slice.name}</span>
+                  <span className="tabular text-[12px] text-faint">
+                    {total > 0 ? Math.round((slice.value / total) * 100) : 0}%
+                  </span>
+                  <span className="tabular w-24 text-right text-steel">
+                    {formatBRL(slice.value)}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        )}
       </div>
     </section>
   );
 }
 
+interface UpcomingEntry {
+  key: string;
+  date: string;
+  title: string;
+  subtitle: string;
+  amountCents: number;
+  incoming: boolean;
+  overdue: boolean;
+  to: string;
+}
+
 function UpcomingCard() {
+  const today = todayIso();
+  const limit = addDays(today, 7);
+  const { data, isPending } = useTransactions({ from: today, to: limit, status: 'PLANNED' });
+  const { data: invoices = [] } = useInvoices({ unpaid: true });
+
+  const entries: UpcomingEntry[] = [
+    // Compras no cartão são cobradas pela fatura, que entra abaixo com o valor total
+    ...(data?.items ?? [])
+      .filter((item) => !item.invoice)
+      .map((item) => ({
+        key: item.id,
+        date: item.date,
+        title: item.description,
+        subtitle: item.account.name,
+        amountCents: item.amountCents,
+        incoming: item.type === 'INCOME' || item.transfer?.direction === 'IN',
+        overdue: false,
+        to: '/lancamentos?status=PLANNED',
+      })),
+    // Faturas vencidas ou que vencem na semana, descontando o que já está agendado
+    ...invoices
+      .filter((invoice) => invoice.dueDate <= limit)
+      .map((invoice) => ({ invoice, due: invoice.remainingCents - invoice.scheduledCents }))
+      .filter(({ due }) => due > 0)
+      .map(({ invoice, due }) => ({
+        key: invoice.id,
+        date: invoice.dueDate,
+        title: `Fatura ${invoice.account.name}`,
+        subtitle: invoice.overdue
+          ? 'Vencida'
+          : invoice.status === 'OPEN'
+            ? 'Ainda aberta'
+            : 'Fechada',
+        amountCents: due,
+        incoming: false,
+        overdue: invoice.overdue,
+        to: `/faturas?cartao=${invoice.account.id}&fatura=${invoice.id}`,
+      })),
+  ]
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .slice(0, 6);
+
   return (
     <section aria-labelledby="titulo-vencimentos" className="card flex flex-col p-6">
-      <h2 id="titulo-vencimentos" className="text-lg font-semibold">
-        Próximos vencimentos
-      </h2>
-      <p className="text-sm text-slate">Contas e faturas dos próximos 7 dias</p>
-      <div className="mt-6 flex flex-1 flex-col items-center justify-center rounded-[12px] border border-dashed border-line-strong px-6 py-10 text-center">
-        <span className="grid size-12 place-items-center rounded-full bg-ember-soft text-ember-deep">
-          <CalendarClock size={22} strokeWidth={1.75} aria-hidden="true" />
-        </span>
-        <p className="mt-4 font-medium">Nenhum vencimento por perto</p>
-        <p className="mt-1 max-w-[36ch] text-sm text-slate">
-          Quando houver contas recorrentes ou faturas de cartão, elas aparecem aqui com a data e o
-          valor.
-        </p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 id="titulo-vencimentos" className="text-lg font-semibold">
+            Próximos vencimentos
+          </h2>
+          <p className="text-sm text-slate">Contas e faturas dos próximos 7 dias</p>
+        </div>
+        {entries.length ? (
+          <Link to="/lancamentos?status=PLANNED" className="link-ember text-sm">
+            Ver previstos
+          </Link>
+        ) : null}
       </div>
+      {isPending ? null : entries.length === 0 ? (
+        <div className="mt-6 flex flex-1 flex-col items-center justify-center rounded-[12px] border border-dashed border-line-strong px-6 py-10 text-center">
+          <span className="grid size-12 place-items-center rounded-full bg-ember-soft text-ember-deep">
+            <CalendarClock size={22} strokeWidth={1.75} aria-hidden="true" />
+          </span>
+          <p className="mt-4 font-medium">Nenhum vencimento por perto</p>
+          <p className="mt-1 max-w-[36ch] text-sm text-slate">
+            Lançamentos previstos e faturas dos próximos dias aparecem aqui com a data e o valor.
+          </p>
+        </div>
+      ) : (
+        <ul className="mt-4 divide-y divide-line">
+          {entries.map((entry) => (
+            <li key={entry.key}>
+              <Link
+                to={entry.to}
+                className="-mx-2 flex items-center gap-3 rounded-[10px] px-2 py-3 transition-colors hover:bg-sunken"
+              >
+                <span
+                  className={`tabular grid w-12 shrink-0 place-items-center rounded-[10px] py-1.5 text-center text-[12px] leading-tight font-semibold ${
+                    entry.overdue
+                      ? 'bg-negative-soft text-negative'
+                      : entry.date === today
+                        ? 'bg-ember-soft text-ember-deep'
+                        : 'bg-sunken text-steel'
+                  }`}
+                >
+                  {entry.date === today ? 'Hoje' : formatShortDate(entry.date)}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-medium">{entry.title}</span>
+                  <span
+                    className={`block truncate text-[12px] ${
+                      entry.overdue ? 'text-negative' : 'text-slate'
+                    }`}
+                  >
+                    {entry.subtitle}
+                  </span>
+                </span>
+                <span
+                  className={`tabular text-sm font-semibold ${
+                    entry.incoming ? 'text-positive' : ''
+                  }`}
+                >
+                  {entry.incoming ? '+' : '−'}
+                  {formatBRL(entry.amountCents)}
+                </span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
     </section>
   );
 }

@@ -7,6 +7,8 @@ export interface CategoryRow {
   color: string | null;
   icon: string | null;
   parentId: string | null;
+  archived: boolean;
+  usageCount: number;
 }
 
 /** Monta a árvore categoria > subcategorias, ordenada por nome (pt-BR). */

@@ -2,16 +2,20 @@ import { createBrowserRouter, Navigate, RouterProvider } from 'react-router';
 import { LoginPage } from '@/features/auth/LoginPage';
 import { RegisterPage } from '@/features/auth/RegisterPage';
 import { GuestOnly, RequireAuth } from '@/features/auth/route-guards';
+import { InvoicesPage } from '@/features/invoices/InvoicesPage';
+import { ProjectionPage } from '@/features/projection/ProjectionPage';
+import { RecurrencesPage } from '@/features/recurrences/RecurrencesPage';
 import { AccountsPage } from '@/features/accounts/AccountsPage';
+import { BudgetPage } from '@/features/budget/BudgetPage';
 import { CategoriesPage } from '@/features/categories/CategoriesPage';
 import { AlertsPage } from '@/features/settings/AlertsPage';
 import { ProfilePage } from '@/features/settings/ProfilePage';
 import { SecurityPage } from '@/features/settings/SecurityPage';
 import { SettingsLayout } from '@/features/settings/SettingsLayout';
+import { TransactionsPage } from '@/features/transactions/TransactionsPage';
 import { AppLayout } from '@/layout/AppLayout';
 import { DashboardPage } from '@/pages/DashboardPage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
-import { UpcomingPage } from '@/pages/UpcomingPage';
 
 const router = createBrowserRouter([
   {
@@ -28,43 +32,12 @@ const router = createBrowserRouter([
         element: <AppLayout />,
         children: [
           { index: true, element: <DashboardPage /> },
-          {
-            path: 'lancamentos',
-            element: (
-              <UpcomingPage
-                title="Lançamentos"
-                description="Receitas, despesas e transferências do mês, com filtros por conta, categoria e status."
-              />
-            ),
-          },
+          { path: 'lancamentos', element: <TransactionsPage /> },
           { path: 'contas', element: <AccountsPage /> },
-          {
-            path: 'orcamento',
-            element: (
-              <UpcomingPage
-                title="Orçamento"
-                description="Limite mensal por categoria e quanto já foi consumido."
-              />
-            ),
-          },
-          {
-            path: 'projecao',
-            element: (
-              <UpcomingPage
-                title="Projeção"
-                description="Saldo dia a dia dos próximos meses, com o menor saldo e a data em que ficaria negativo."
-              />
-            ),
-          },
-          {
-            path: 'recorrencias',
-            element: (
-              <UpcomingPage
-                title="Recorrências"
-                description="Salário, aluguel e assinaturas que geram lançamentos previstos todo mês."
-              />
-            ),
-          },
+          { path: 'faturas', element: <InvoicesPage /> },
+          { path: 'orcamento', element: <BudgetPage /> },
+          { path: 'projecao', element: <ProjectionPage /> },
+          { path: 'recorrencias', element: <RecurrencesPage /> },
           {
             path: 'configuracoes',
             element: <SettingsLayout />,

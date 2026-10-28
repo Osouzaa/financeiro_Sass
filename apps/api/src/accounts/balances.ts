@@ -27,13 +27,14 @@ function cashEffect(total: TransactionTotal): number {
 /**
  * Efeito no total em aberto de um cartão (dívida).
  * Compras somam; estornos (receitas) e pagamentos de fatura (transferências que entram) abatem.
- * No cartão, a compra conta mesmo antes de a fatura fechar, então o status não importa.
+ * No cartão, a compra conta mesmo antes de a fatura fechar, então o status não importa;
+ * já o pagamento (transferência) só abate quando realizado.
  */
 function cardEffect(total: TransactionTotal): number {
   const cents = toCents(total.amount);
   if (total.type === TransactionType.EXPENSE) return cents;
   if (total.type === TransactionType.INCOME) return -cents;
-  if (total.type === TransactionType.TRANSFER)
+  if (total.type === TransactionType.TRANSFER && total.status === TransactionStatus.PAID)
     return total.transferDirection === 'IN' ? -cents : cents;
   return 0;
 }

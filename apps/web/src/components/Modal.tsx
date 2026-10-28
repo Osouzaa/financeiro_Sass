@@ -34,8 +34,13 @@ export function Modal({
   return (
     <dialog
       ref={ref}
-      onClose={onClose}
+      // Só reage aos eventos do próprio <dialog>: num modal aberto dentro de outro,
+      // o React propaga close/cancel pela árvore e fecharia os dois
+      onClose={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
       onCancel={(event) => {
+        if (event.target !== event.currentTarget) return;
         event.preventDefault();
         onClose();
       }}

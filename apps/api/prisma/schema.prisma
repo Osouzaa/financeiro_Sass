@@ -133,7 +133,8 @@ model Invoice {
   referenceMonth String   @map("ReferenceMonth") @db.Char(7)
   closingDate    DateTime @map("ClosingDate") @db.Date
   dueDate        DateTime @map("DueDate") @db.Date
-  /// OPEN | CLOSED | PARTIALLY_PAID | PAID
+  /// Reservado: o status (OPEN | CLOSED | PARTIALLY_PAID | PAID) é calculado na leitura
+  /// a partir das datas e dos pagamentos ligados à fatura (invoices/invoice-math.ts)
   status         String   @default("OPEN") @map("Status") @db.VarChar(20)
   createdAt      DateTime @default(now()) @map("CreatedAt") @db.DateTime2
   updatedAt      DateTime @updatedAt @map("UpdatedAt") @db.DateTime2

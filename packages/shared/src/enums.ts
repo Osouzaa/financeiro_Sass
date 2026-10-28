@@ -67,6 +67,19 @@ export const transactionTypeLabels: Record<TransactionType, string> = {
   TRANSFER: 'Transferência',
 };
 
+export const invoiceStatusLabels: Record<InvoiceStatus, string> = {
+  OPEN: 'Aberta',
+  CLOSED: 'Fechada',
+  PARTIALLY_PAID: 'Paga em parte',
+  PAID: 'Paga',
+};
+
+export const recurrenceFrequencyLabels: Record<RecurrenceFrequency, string> = {
+  WEEKLY: 'Semanal',
+  MONTHLY: 'Mensal',
+  YEARLY: 'Anual',
+};
+
 export const transactionStatusLabels: Record<TransactionStatus, string> = {
   PLANNED: 'Previsto',
   PAID: 'Realizado',

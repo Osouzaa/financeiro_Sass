@@ -11,6 +11,7 @@ import {
   type AccountDto,
   type AccountInputParsed,
 } from '@financeiro/shared';
+import { fromDbDate, toDbDate } from '../common/db-date';
 import { PrismaService } from '../prisma/prisma.service';
 import { computeBalance, type TransactionTotal } from './balances';
 
@@ -41,10 +42,6 @@ type AccountRow = {
   creditLimit: { toString(): string } | null;
   paymentAccountId: string | null;
 };
-
-/** DATE do SQL Server <-> 'YYYY-MM-DD' sem passar por fuso horário. */
-const toDbDate = (iso: string) => new Date(`${iso}T00:00:00.000Z`);
-const fromDbDate = (date: Date) => date.toISOString().slice(0, 10);
 
 @Injectable()
 export class AccountsService {
