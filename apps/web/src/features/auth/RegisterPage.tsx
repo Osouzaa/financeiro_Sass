@@ -55,13 +55,13 @@ export function RegisterPage() {
           error={errors.password?.message}
           {...register('password')}
         />
-        <Button type="submit" loading={isSubmitting} className="mt-2">
+        <Button type="submit" loading={isSubmitting} className="mt-4 w-full">
           {isSubmitting ? 'Criando conta…' : 'Criar conta'}
         </Button>
       </form>
-      <p className="mt-8 text-sm text-ink-soft">
+      <p className="mt-10 text-sm text-steel">
         Já tem conta?{' '}
-        <Link to="/entrar" className="font-semibold text-accent underline-offset-4 hover:underline">
+        <Link to="/entrar" className="link-ember font-medium">
           Entrar
         </Link>
       </p>

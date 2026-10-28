@@ -50,16 +50,13 @@ export function LoginPage() {
           error={errors.password?.message}
           {...register('password')}
         />
-        <Button type="submit" loading={isSubmitting} className="mt-2">
+        <Button type="submit" loading={isSubmitting} className="mt-4 w-full">
           {isSubmitting ? 'Entrando…' : 'Entrar'}
         </Button>
       </form>
-      <p className="mt-8 text-sm text-ink-soft">
+      <p className="mt-10 text-sm text-steel">
         Ainda não tem conta?{' '}
-        <Link
-          to="/cadastro"
-          className="font-semibold text-accent underline-offset-4 hover:underline"
-        >
+        <Link to="/cadastro" className="link-ember font-medium">
           Criar conta
         </Link>
       </p>

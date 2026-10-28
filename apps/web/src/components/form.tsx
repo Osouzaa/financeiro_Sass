@@ -21,8 +21,8 @@ export function TextField({
   const describedBy = error ? `${inputId}-error` : hint ? `${inputId}-hint` : undefined;
 
   return (
-    <div className="flex flex-col gap-1.5">
-      <label htmlFor={inputId} className="text-sm font-medium text-ink">
+    <div className="flex flex-col gap-2">
+      <label htmlFor={inputId} className="text-sm font-medium text-graphite">
         {label}
       </label>
       <input
@@ -30,17 +30,17 @@ export function TextField({
         id={inputId}
         aria-invalid={error ? true : undefined}
         aria-describedby={describedBy}
-        className={`h-11 rounded-md border bg-surface px-3 text-[15px] text-ink placeholder:text-ink-faint transition-colors focus:border-accent focus:outline-none focus:ring-3 focus:ring-accent-soft ${
-          error ? 'border-expense' : 'border-line-strong'
+        className={`h-12 border bg-canvas px-4 text-[15px] text-graphite transition-colors placeholder:text-slate focus:border-graphite focus:outline-none focus-visible:outline-none focus:ring-1 focus:ring-graphite ${
+          error ? 'border-ember' : 'border-slate/60 hover:border-slate'
         } ${className}`}
         {...props}
       />
       {error ? (
-        <p id={`${inputId}-error`} className="text-sm text-expense">
+        <p id={`${inputId}-error`} className="text-[13px] text-ember-deep">
           {error}
         </p>
       ) : hint ? (
-        <p id={`${inputId}-hint`} className="text-sm text-ink-faint">
+        <p id={`${inputId}-hint`} className="text-[13px] text-slate">
           {hint}
         </p>
       ) : null}
@@ -49,10 +49,11 @@ export function TextField({
 }
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: 'primary' | 'quiet';
+  variant?: 'primary' | 'ghost';
   loading?: boolean;
 }
 
+/** Botões retos (raio 0): contraste deliberado com os cards e a navegação arredondada. */
 export function Button({
   variant = 'primary',
   loading,
@@ -63,13 +64,13 @@ export function Button({
 }: ButtonProps) {
   const styles =
     variant === 'primary'
-      ? 'bg-ink text-white hover:bg-accent-strong'
-      : 'text-ink-soft hover:bg-line/60 hover:text-ink';
+      ? 'bg-graphite text-canvas hover:bg-steel'
+      : 'border border-graphite text-graphite hover:bg-ash';
   return (
     <button
       disabled={disabled || loading}
       aria-busy={loading || undefined}
-      className={`inline-flex h-11 items-center justify-center gap-2 rounded-md px-4 text-[15px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${styles} ${className}`}
+      className={`inline-flex h-12 items-center justify-center gap-2 px-5 font-display text-base leading-none tracking-[-0.02em] transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${styles} ${className}`}
       {...props}
     >
       {children}
@@ -82,7 +83,7 @@ export function FormAlert({ message }: { message?: string }) {
   return (
     <p
       role="alert"
-      className="rounded-md border border-expense/30 bg-expense-soft px-3 py-2.5 text-sm text-expense"
+      className="border-l-2 border-ember bg-ember-wash px-4 py-3 text-sm text-ember-deep"
     >
       {message}
     </p>

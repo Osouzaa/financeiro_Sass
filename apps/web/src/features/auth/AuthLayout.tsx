@@ -1,31 +1,32 @@
 import type { ReactNode } from 'react';
+import { Logo } from '@/components/Logo';
 
 /**
- * Tela de entrada: à esquerda, a pergunta que o produto responde;
- * à direita, o formulário. No celular, a pergunta vira um cabeçalho compacto.
+ * Tela de entrada: à esquerda, sobre papel marfim, a pergunta que o produto
+ * responde e um gráfico ilustrativo; à direita, o formulário no branco.
  */
 export function AuthLayout({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <div className="grid min-h-dvh lg:grid-cols-[1.1fr_1fr]">
-      <aside className="relative flex flex-col justify-between overflow-hidden bg-ink px-6 py-8 text-white sm:px-10 lg:px-16 lg:py-14">
-        <p className="text-[15px] font-semibold tracking-tight text-white/90">Financeiro</p>
+    <div className="grid min-h-dvh lg:grid-cols-[1.15fr_1fr]">
+      <aside className="flex flex-col bg-ivory px-6 py-8 sm:px-10 lg:px-16 lg:py-12">
+        <Logo />
 
-        <div className="my-10 lg:my-0">
-          <h1 className="max-w-[12ch] text-[clamp(2.25rem,5.5vw,4.75rem)] leading-[0.98] font-semibold tracking-[-0.035em]">
+        <div className="mt-12 lg:mt-auto">
+          <h1 className="max-w-[14ch] text-balance text-[clamp(2.75rem,6vw,4.125rem)] leading-[0.91] tracking-[-0.02em]">
             Quanto você vai ter no dia 30?
           </h1>
-          <p className="mt-6 max-w-[42ch] text-base leading-relaxed text-white/70 lg:text-lg">
-            Registre contas, cartões e lançamentos recorrentes. O saldo dos próximos meses aparece
-            antes de o mês fechar no vermelho.
+          <p className="mt-6 max-w-[44ch] text-lg leading-snug text-steel">
+            Contas, cartões e recorrências num só lugar, com o saldo projetado dia a dia antes de o
+            mês fechar no vermelho.
           </p>
         </div>
 
-        <ProjectionLine />
+        <ProjectionPreview />
       </aside>
 
       <main className="flex items-center justify-center px-6 py-12 sm:px-10">
-        <div className="w-full max-w-sm">
-          <h2 className="mb-8 text-2xl font-semibold tracking-tight">{title}</h2>
+        <div className="w-full max-w-[380px]">
+          <h2 className="mb-10 text-[32px] leading-[1.19]">{title}</h2>
           {children}
         </div>
       </main>
@@ -33,32 +34,49 @@ export function AuthLayout({ title, children }: { title: string; children: React
   );
 }
 
-/** Linha ilustrativa de saldo projetado: sobe com o salário, cai no vencimento da fatura. */
-function ProjectionLine() {
+/**
+ * Card ilustrativo de projeção (dados de exemplo, rotulados como tal):
+ * o saldo sobe com o salário e cai no vencimento da fatura.
+ */
+function ProjectionPreview() {
   return (
-    <svg
-      viewBox="-6 0 612 120"
-      className="hidden w-full max-w-xl text-[#7fa2f0] lg:block"
-      aria-hidden="true"
-      fill="none"
-    >
-      <line
-        x1="0"
-        y1="96"
-        x2="600"
-        y2="96"
-        stroke="currentColor"
-        strokeOpacity="0.25"
-        strokeDasharray="3 6"
-      />
-      <path
-        d="M0 70 L80 66 L120 30 L200 38 L260 44 L300 82 L360 80 L420 34 L500 40 L560 78 L600 76"
-        stroke="currentColor"
-        strokeWidth="2.5"
-        strokeLinejoin="round"
-        strokeLinecap="round"
-      />
-      <circle cx="600" cy="76" r="4" fill="currentColor" />
-    </svg>
+    <figure className="mt-12 hidden max-w-[520px] rounded-[20px] bg-canvas p-8 lg:mt-14 lg:mb-auto lg:block">
+      <figcaption className="flex items-baseline justify-between gap-4">
+        <span className="text-sm text-steel">Saldo projetado em 30/11</span>
+        <span className="font-display text-sm tracking-[-0.02em] text-brass">exemplo</span>
+      </figcaption>
+      <p className="tabular mt-2 font-display text-[40px] leading-[1.2] tracking-[-0.02em]">
+        R$ 2.418,90
+      </p>
+      <svg viewBox="-4 0 448 120" className="mt-6 w-full" aria-hidden="true" fill="none">
+        <line x1="0" y1="104" x2="440" y2="104" stroke="#e8e8e8" />
+        {/* Linha secundária (latão): gastos acumulados */}
+        <path
+          d="M0 98 L60 92 L120 86 L180 74 L240 70 L300 58 L360 52 L440 44"
+          stroke="#816729"
+          strokeWidth="1.25"
+          strokeDasharray="2 4"
+          strokeLinecap="round"
+        />
+        {/* Linha principal (laranja): saldo */}
+        <path
+          d="M0 70 L60 66 L90 24 L150 30 L210 36 L240 82 L300 78 L340 30 L400 36 L440 48"
+          stroke="#ff682c"
+          strokeWidth="2"
+          strokeLinejoin="round"
+          strokeLinecap="round"
+        />
+        <circle cx="440" cy="48" r="4" fill="#ff682c" />
+      </svg>
+      <div className="mt-4 flex gap-6 text-[13px] text-steel">
+        <span className="inline-flex items-center gap-2">
+          <span className="h-0.5 w-4 bg-ember" aria-hidden="true" /> Saldo
+        </span>
+        <span className="inline-flex items-center gap-2">
+          <span className="h-0 w-4 border-t border-dashed border-brass" aria-hidden="true" /> Gastos
+          do mês
+        </span>
+      </div>
+    </figure>
   );
 }

@@ -1,26 +1,36 @@
 @import 'tailwindcss';
 
 /*
- * Tokens de design.
- * Tinta azul-marinho sobre cinza frio; acento azul-cédula (nota de R$ 100).
- * Verde e vermelho ficam reservados para receita e despesa.
+ * Tokens de design (referência: DESIGN.md — estilo editorial, papel claro e
+ * um único acento laranja).
+ *
+ * - 95% acromático: grafite sobre branco e cinzas quentes.
+ * - Ember (laranja) só como pontuação: sublinhado de link, destaque em gráfico,
+ *   detalhe da logo. Nunca como fundo de botão.
+ * - Ember Deep é a variação escura usada em TEXTO de erro, porque o laranja
+ *   original não tem contraste suficiente para texto pequeno em fundo branco.
+ * - Sem sombras: a profundidade vem do contraste entre superfícies.
  */
 @theme {
-  --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif;
+  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Inter Tight', 'Inter', ui-sans-serif, system-ui, sans-serif;
 
-  --color-ink: #16233f;
-  --color-ink-soft: #4a5873;
-  --color-ink-faint: #7c879b;
-  --color-paper: #f4f6f8;
-  --color-surface: #ffffff;
-  --color-line: #dde3ea;
-  --color-line-strong: #c3ccd8;
-  --color-accent: #2d5bd0;
-  --color-accent-strong: #2149ad;
-  --color-accent-soft: #e8eefb;
-  --color-income: #157f3d;
-  --color-expense: #b42318;
-  --color-expense-soft: #fdecea;
+  --color-graphite: #202020;
+  --color-steel: #4d4d4d;
+  --color-slate: #828282;
+  --color-mist: #e8e8e8;
+  --color-ash: #efefef;
+  --color-fog: #f5f5f5;
+  --color-ivory: #ebe6dd;
+  --color-canvas: #ffffff;
+  --color-ember: #ff682c;
+  --color-ember-deep: #b8400c;
+  --color-ember-wash: #fff1eb;
+  --color-brass: #816729;
+
+  --radius-card: 6px 0 0 0;
+  --radius-widget: 20px;
+  --radius-pill: 200px;
 }
 
 @layer base {
@@ -29,17 +39,17 @@
   }
 
   body {
-    @apply bg-paper text-ink font-sans antialiased;
-    font-feature-settings: 'ss01';
+    @apply bg-canvas font-sans text-graphite antialiased;
   }
 
-  /* Valores monetários sempre com algarismos de mesma largura, para alinhar colunas */
-  .tabular {
-    font-variant-numeric: tabular-nums;
+  h1,
+  h2,
+  h3 {
+    @apply font-display font-normal tracking-[-0.02em];
   }
 
   :focus-visible {
-    outline: 2px solid var(--color-accent);
+    outline: 2px solid var(--color-graphite);
     outline-offset: 2px;
   }
 
@@ -50,5 +60,23 @@
       transition-duration: 0.01ms !important;
       animation-duration: 0.01ms !important;
     }
+  }
+}
+
+@layer components {
+  /* Valores monetários com algarismos de mesma largura, para alinhar colunas */
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Card de destaque: canto superior esquerdo suave, os demais retos */
+  .card-editorial {
+    @apply bg-ash;
+    border-radius: var(--radius-card);
+  }
+
+  /* Link com sublinhado laranja: o acento aparece só no traço */
+  .link-ember {
+    @apply text-graphite underline decoration-ember decoration-1 underline-offset-[3px] transition-colors hover:decoration-2;
   }
 }

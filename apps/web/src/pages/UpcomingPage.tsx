@@ -5,8 +5,12 @@ export function UpcomingPage({ title, description }: { title: string; descriptio
   return (
     <>
       <PageHeader title={title} description={description} />
-      <div className="rounded-lg border border-dashed border-line-strong px-6 py-10 text-center text-[15px] text-ink-soft">
-        Esta tela entra na próxima etapa do desenvolvimento.
+      <div className="card-editorial flex flex-col gap-2 bg-ivory p-8 sm:p-14">
+        <p className="font-display text-2xl tracking-[-0.02em]">Em construção</p>
+        <p className="max-w-[52ch] text-[15px] text-steel">
+          Esta tela entra na próxima etapa do desenvolvimento. Enquanto isso, as categorias já estão
+          disponíveis em Configurações.
+        </p>
       </div>
     </>
   );

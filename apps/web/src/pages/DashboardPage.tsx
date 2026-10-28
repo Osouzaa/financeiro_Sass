@@ -40,27 +40,32 @@ export function DashboardPage() {
         description="Ainda não há dados para mostrar. Siga estes passos para montar sua primeira projeção de saldo."
       />
 
-      <ol className="divide-y divide-line overflow-hidden rounded-lg border border-line bg-surface">
-        {FIRST_STEPS.map((step, index) => (
-          <li key={step.to}>
-            <Link
-              to={step.to}
-              className="flex gap-4 px-5 py-4 transition-colors hover:bg-paper sm:px-6 sm:py-5"
-            >
-              <span
-                className="tabular grid size-8 shrink-0 place-items-center rounded-full border border-line-strong text-sm font-semibold text-ink-soft"
-                aria-hidden="true"
+      <section aria-labelledby="primeiros-passos" className="card-editorial p-6 sm:p-10 lg:p-14">
+        <h2 id="primeiros-passos" className="text-lg leading-tight text-steel">
+          Primeiros passos
+        </h2>
+        <ol className="mt-8 grid gap-px bg-mist sm:grid-cols-2">
+          {FIRST_STEPS.map((step, index) => (
+            <li key={step.to} className="bg-ash">
+              <Link
+                to={step.to}
+                className="group flex h-full flex-col gap-3 py-6 transition-colors sm:p-8 sm:hover:bg-fog"
               >
-                {index + 1}
-              </span>
-              <span>
-                <span className="block font-semibold">{step.title}</span>
-                <span className="mt-0.5 block text-[15px] text-ink-soft">{step.detail}</span>
-              </span>
-            </Link>
-          </li>
-        ))}
-      </ol>
+                <span
+                  className="tabular font-display text-[40px] leading-none tracking-[-0.02em] text-slate transition-colors group-hover:text-ember"
+                  aria-hidden="true"
+                >
+                  {String(index + 1).padStart(2, '0')}
+                </span>
+                <span className="mt-2 font-display text-xl leading-tight tracking-[-0.02em]">
+                  {step.title}
+                </span>
+                <span className="text-[15px] leading-relaxed text-steel">{step.detail}</span>
+              </Link>
+            </li>
+          ))}
+        </ol>
+      </section>
     </>
   );
 }

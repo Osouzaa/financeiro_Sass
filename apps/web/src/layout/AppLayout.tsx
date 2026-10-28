@@ -1,112 +1,116 @@
-import {
-  ArrowLeftRight,
-  CalendarRange,
-  LayoutDashboard,
-  LogOut,
-  PiggyBank,
-  Settings,
-  TrendingUp,
-  Wallet,
-  type LucideIcon,
-} from 'lucide-react';
-import { NavLink, Outlet } from 'react-router';
+import { LogOut } from 'lucide-react';
+import type { ReactNode } from 'react';
+import { Link, NavLink, Outlet } from 'react-router';
+import { Logo } from '@/components/Logo';
 import { useAuth } from '@/features/auth/auth-context';
 
-interface NavItem {
-  to: string;
-  label: string;
-  icon: LucideIcon;
-}
-
-const NAV_ITEMS: NavItem[] = [
-  { to: '/', label: 'Visão geral', icon: LayoutDashboard },
-  { to: '/lancamentos', label: 'Lançamentos', icon: ArrowLeftRight },
-  { to: '/contas', label: 'Contas e cartões', icon: Wallet },
-  { to: '/orcamento', label: 'Orçamento', icon: PiggyBank },
-  { to: '/projecao', label: 'Projeção', icon: TrendingUp },
-  { to: '/recorrencias', label: 'Recorrências', icon: CalendarRange },
-  { to: '/configuracoes', label: 'Configurações', icon: Settings },
+const NAV_ITEMS = [
+  { to: '/', label: 'Visão geral' },
+  { to: '/lancamentos', label: 'Lançamentos' },
+  { to: '/contas', label: 'Contas e cartões' },
+  { to: '/orcamento', label: 'Orçamento' },
+  { to: '/projecao', label: 'Projeção' },
+  { to: '/recorrencias', label: 'Recorrências' },
+  { to: '/configuracoes', label: 'Configurações' },
 ];
 
 export function AppLayout() {
   const { user, logout } = useAuth();
+  const initials = user?.name
+    .split(' ')
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join('');
 
   return (
-    <div className="min-h-dvh lg:grid lg:grid-cols-[248px_1fr]">
+    <div className="min-h-dvh bg-canvas">
       <a
         href="#conteudo"
-        className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:rounded-md focus:bg-surface focus:px-3 focus:py-2"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:bg-graphite focus:px-4 focus:py-2 focus:text-canvas"
       >
         Pular para o conteúdo
       </a>
 
-      <aside className="border-line bg-surface lg:sticky lg:top-0 lg:flex lg:h-dvh lg:flex-col lg:border-r">
-        <div className="flex h-16 items-center justify-between border-b border-line px-5 lg:border-b-0">
-          <span className="text-[17px] font-semibold tracking-tight">Financeiro</span>
-          <button
-            type="button"
-            onClick={() => void logout()}
-            className="rounded-md p-2 text-ink-soft hover:bg-paper hover:text-ink lg:hidden"
-            aria-label="Sair"
+      <header className="border-b border-mist">
+        <div className="mx-auto flex max-w-[1200px] flex-wrap items-center gap-x-6 gap-y-3 px-5 py-4 sm:px-8">
+          <Link to="/" aria-label="Financeiro, visão geral" className="shrink-0">
+            <Logo size={28} />
+          </Link>
+
+          <nav
+            aria-label="Principal"
+            className="order-last -mx-5 w-[calc(100%+2.5rem)] overflow-x-auto px-5 sm:-mx-8 sm:w-[calc(100%+4rem)] sm:px-8 xl:order-none xl:mx-auto xl:w-auto xl:overflow-visible xl:px-0"
           >
-            <LogOut size={18} />
-          </button>
-        </div>
+            <ul className="flex w-max gap-1 rounded-[200px] bg-ash p-1.5">
+              {NAV_ITEMS.map(({ to, label }) => (
+                <li key={to}>
+                  <NavLink
+                    to={to}
+                    end={to === '/'}
+                    className={({ isActive }) =>
+                      `block rounded-[200px] px-4 py-2 font-display text-[15px] leading-none tracking-[-0.02em] whitespace-nowrap transition-colors ${
+                        isActive
+                          ? 'bg-canvas text-graphite'
+                          : 'text-steel hover:bg-canvas/60 hover:text-graphite'
+                      }`
+                    }
+                  >
+                    {label}
+                  </NavLink>
+                </li>
+              ))}
+            </ul>
+          </nav>
 
-        <nav
-          aria-label="Principal"
-          className="overflow-x-auto border-b border-line lg:flex-1 lg:border-b-0"
-        >
-          <ul className="flex gap-1 px-3 py-2 lg:flex-col lg:py-4">
-            {NAV_ITEMS.map(({ to, label, icon: Icon }) => (
-              <li key={to}>
-                <NavLink
-                  to={to}
-                  end={to === '/'}
-                  className={({ isActive }) =>
-                    `flex items-center gap-3 rounded-md px-3 py-2 text-[15px] whitespace-nowrap transition-colors ${
-                      isActive
-                        ? 'bg-accent-soft font-semibold text-accent-strong'
-                        : 'text-ink-soft hover:bg-paper hover:text-ink'
-                    }`
-                  }
-                >
-                  <Icon size={18} strokeWidth={1.75} aria-hidden="true" />
-                  {label}
-                </NavLink>
-              </li>
-            ))}
-          </ul>
-        </nav>
-
-        <div className="hidden border-t border-line p-4 lg:block">
-          <p className="truncate text-sm font-semibold">{user?.name}</p>
-          <p className="truncate text-sm text-ink-faint">{user?.email}</p>
-          <button
-            type="button"
-            onClick={() => void logout()}
-            className="mt-3 inline-flex items-center gap-2 text-sm text-ink-soft hover:text-ink"
-          >
-            <LogOut size={16} aria-hidden="true" />
-            Sair
-          </button>
+          <div className="ml-auto flex items-center gap-1 xl:ml-0">
+            <span
+              className="grid size-9 place-items-center rounded-full bg-ivory font-display text-sm text-graphite"
+              title={`${user?.name ?? ''} · ${user?.email ?? ''}`}
+            >
+              <span aria-hidden="true">{initials}</span>
+              <span className="sr-only">
+                Conectado como {user?.name} ({user?.email})
+              </span>
+            </span>
+            <button
+              type="button"
+              onClick={() => void logout()}
+              className="grid size-9 place-items-center rounded-full text-steel transition-colors hover:bg-ash hover:text-graphite"
+              aria-label="Sair"
+              title="Sair"
+            >
+              <LogOut size={18} strokeWidth={1.5} />
+            </button>
+          </div>
         </div>
-      </aside>
+      </header>
 
-      <main id="conteudo" className="min-w-0 px-5 py-8 sm:px-8 lg:px-12 lg:py-10">
-        <div className="mx-auto max-w-5xl">
-          <Outlet />
-        </div>
+      <main id="conteudo" className="mx-auto max-w-[1200px] px-5 py-10 sm:px-8 lg:py-16">
+        <Outlet />
       </main>
     </div>
   );
 }
 
-export function PageHeader({ title, description }: { title: string; description?: string }) {
+export function PageHeader({
+  title,
+  description,
+  aside,
+}: {
+  title: string;
+  description?: string;
+  aside?: ReactNode;
+}) {
   return (
-    <header className="mb-8">
-      <h1 className="text-[28px] leading-tight font-semibold tracking-[-0.02em]">{title}</h1>
-      {description ? <p className="mt-2 max-w-[60ch] text-ink-soft">{description}</p> : null}
+    <header className="mb-10 flex flex-wrap items-end justify-between gap-6 lg:mb-14">
+      <div>
+        <h1 className="text-[clamp(2rem,4vw,2.5rem)] leading-[1.2]">{title}</h1>
+        {description ? (
+          <p className="mt-3 max-w-[62ch] text-lg leading-snug text-steel">{description}</p>
+        ) : null}
+      </div>
+      {aside}
     </header>
   );
 }

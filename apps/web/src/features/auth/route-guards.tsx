@@ -1,10 +1,14 @@
 import { Navigate, Outlet, useLocation } from 'react-router';
+import { LogoMark } from '@/components/Logo';
 import { useAuth } from './auth-context';
 
 function FullScreenLoader() {
   return (
-    <div className="grid min-h-dvh place-items-center text-sm text-ink-faint" role="status">
-      Carregando…
+    <div className="grid min-h-dvh place-items-center" role="status">
+      <div className="flex flex-col items-center gap-4 text-sm text-slate">
+        <LogoMark size={40} className="animate-pulse motion-reduce:animate-none" />
+        Carregando…
+      </div>
     </div>
   );
 }
