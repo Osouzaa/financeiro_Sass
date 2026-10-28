@@ -1,0 +1,17 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "lib": ["ES2023"],
+    "types": ["node", "jest"],
+    "outDir": "./dist",
+    "baseUrl": "./",
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    // Necessário para o NestJS ler os tipos dos construtores (injeção de dependência)
+    "isolatedModules": false,
+    "removeComments": true
+  },
+  "include": ["src"]
+}

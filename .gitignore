@@ -1,0 +1,17 @@
+node_modules/
+dist/
+coverage/
+.turbo/
+*.log
+.env
+.env.local
+!.env.example
+
+# Cliente Prisma gerado (recriado no install)
+apps/api/src/generated/
+
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json

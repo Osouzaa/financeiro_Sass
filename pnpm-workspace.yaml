@@ -1,0 +1,11 @@
+packages:
+  - apps/*
+  - packages/*
+
+# Pacotes autorizados a rodar scripts de instalação (pnpm 10 bloqueia por padrão)
+onlyBuiltDependencies:
+  - '@nestjs/core'
+  - '@prisma/engines'
+  - '@swc/core'
+  - esbuild
+  - prisma

@@ -1,0 +1,228 @@
+// Modelo de dados do MVP (ver especificação).
+//
+// Convenções:
+// - Tabelas e colunas em PascalCase no SQL Server; campos em camelCase no código.
+// - Valores monetários em DECIMAL(19,2); a aplicação calcula em centavos.
+// - Datas de calendário em DATE (sem hora): competência, caixa, vencimento.
+// - SQL Server não tem enum: tipos e status são VARCHAR validados pela aplicação
+//   (os valores aceitos ficam em @financeiro/shared/enums).
+// - Relações com NoAction: o SQL Server rejeita múltiplos caminhos de cascata,
+//   então exclusões são feitas explicitamente pelos services.
+
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  // CommonJS sem extensão nos imports, compatível com o build padrão do NestJS
+  moduleFormat        = "cjs"
+  importFileExtension = ""
+}
+
+datasource db {
+  provider = "sqlserver"
+}
+
+model User {
+  id           String   @id @default(uuid()) @map("Id") @db.UniqueIdentifier
+  name         String   @map("Name") @db.NVarChar(100)
+  email        String   @unique(map: "UQ_Users_Email") @map("Email") @db.NVarChar(254)
+  passwordHash String   @map("PasswordHash") @db.NVarChar(100)
+  createdAt    DateTime @default(now()) @map("CreatedAt") @db.DateTime2
+  updatedAt    DateTime @updatedAt @map("UpdatedAt") @db.DateTime2
+
+  refreshTokens RefreshToken[]
+  accounts      Account[]
+  categories    Category[]
+  invoices      Invoice[]
+  transactions  Transaction[]
+  recurrences   Recurrence[]
+  budgets       Budget[]
+
+  @@map("Users")
+}
+
+/// Refresh tokens com rotação. Guardamos apenas o hash SHA-256 do token.
+model RefreshToken {
+  id         String    @id @default(uuid()) @map("Id") @db.UniqueIdentifier
+  userId     String    @map("UserId") @db.UniqueIdentifier
+  tokenHash  String    @unique(map: "UQ_RefreshTokens_TokenHash") @map("TokenHash") @db.Char(64)
+  expiresAt  DateTime  @map("ExpiresAt") @db.DateTime2
+  revokedAt  DateTime? @map("RevokedAt") @db.DateTime2
+  /// Token que substituiu este na rotação; usado para detectar reutilização.
+  replacedBy String?   @map("ReplacedBy") @db.UniqueIdentifier
+  userAgent  String?   @map("UserAgent") @db.NVarChar(300)
+  createdAt  DateTime  @default(now()) @map("CreatedAt") @db.DateTime2
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "FK_RefreshTokens_Users")
+
+  @@index([userId], map: "IX_RefreshTokens_UserId")
+  @@map("RefreshTokens")
+}
+
+model Account {
+  id                 String   @id @default(uuid()) @map("Id") @db.UniqueIdentifier
+  userId             String   @map("UserId") @db.UniqueIdentifier
+  name               String   @map("Name") @db.NVarChar(80)
+  /// CHECKING | WALLET | CREDIT_CARD
+  type               String   @map("Type") @db.VarChar(20)
+  initialBalance     Decimal  @default(0) @map("InitialBalance") @db.Decimal(19, 2)
+  initialBalanceDate DateTime @map("InitialBalanceDate") @db.Date
+  color              String?  @map("Color") @db.VarChar(9)
+  /// Somente cartão de crédito
+  closingDay         Int?     @map("ClosingDay") @db.TinyInt
+  dueDay             Int?     @map("DueDay") @db.TinyInt
+  creditLimit        Decimal? @map("CreditLimit") @db.Decimal(19, 2)
+  /// Conta corrente padrão para pagar a fatura
+  paymentAccountId   String?  @map("PaymentAccountId") @db.UniqueIdentifier
+  archived           Boolean  @default(false) @map("Archived")
+  createdAt          DateTime @default(now()) @map("CreatedAt") @db.DateTime2
+  updatedAt          DateTime @updatedAt @map("UpdatedAt") @db.DateTime2
+
+  user           User          @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "FK_Accounts_Users")
+  paymentAccount Account?      @relation("CardPaymentAccount", fields: [paymentAccountId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "FK_Accounts_PaymentAccount")
+  paidCards      Account[]     @relation("CardPaymentAccount")
+  invoices       Invoice[]
+  transactions   Transaction[]
+  recurrences    Recurrence[]
+
+  @@index([userId], map: "IX_Accounts_UserId")
+  @@map("Accounts")
+}
+
+model Category {
+  id        String   @id @default(uuid()) @map("Id") @db.UniqueIdentifier
+  userId    String   @map("UserId") @db.UniqueIdentifier
+  name      String   @map("Name") @db.NVarChar(60)
+  /// INCOME | EXPENSE
+  type      String   @map("Type") @db.VarChar(10)
+  parentId  String?  @map("ParentId") @db.UniqueIdentifier
+  color     String?  @map("Color") @db.VarChar(9)
+  icon      String?  @map("Icon") @db.VarChar(40)
+  archived  Boolean  @default(false) @map("Archived")
+  createdAt DateTime @default(now()) @map("CreatedAt") @db.DateTime2
+  updatedAt DateTime @updatedAt @map("UpdatedAt") @db.DateTime2
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "FK_Categories_Users")
+  parent       Category?     @relation("CategoryTree", fields: [parentId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "FK_Categories_Parent")
+  children     Category[]    @relation("CategoryTree")
+  transactions Transaction[]
+  recurrences  Recurrence[]
+  budgets      Budget[]
+
+  @@index([userId, type], map: "IX_Categories_UserId_Type")
+  @@map("Categories")
+}
+
+model Invoice {
+  id             String   @id @default(uuid()) @map("Id") @db.UniqueIdentifier
+  userId         String   @map("UserId") @db.UniqueIdentifier
+  accountId      String   @map("AccountId") @db.UniqueIdentifier
+  /// Mês do vencimento, YYYY-MM
+  referenceMonth String   @map("ReferenceMonth") @db.Char(7)
+  closingDate    DateTime @map("ClosingDate") @db.Date
+  dueDate        DateTime @map("DueDate") @db.Date
+  /// OPEN | CLOSED | PARTIALLY_PAID | PAID
+  status         String   @default("OPEN") @map("Status") @db.VarChar(20)
+  createdAt      DateTime @default(now()) @map("CreatedAt") @db.DateTime2
+  updatedAt      DateTime @updatedAt @map("UpdatedAt") @db.DateTime2
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "FK_Invoices_Users")
+  account      Account       @relation(fields: [accountId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "FK_Invoices_Accounts")
+  transactions Transaction[]
+
+  @@unique([accountId, referenceMonth], map: "UQ_Invoices_Account_Month")
+  @@index([userId, dueDate], map: "IX_Invoices_UserId_DueDate")
+  @@map("Invoices")
+}
+
+model Transaction {
+  id                 String    @id @default(uuid()) @map("Id") @db.UniqueIdentifier
+  userId             String    @map("UserId") @db.UniqueIdentifier
+  accountId          String    @map("AccountId") @db.UniqueIdentifier
+  /// Obrigatória para receita/despesa, nula para transferência
+  categoryId         String?   @map("CategoryId") @db.UniqueIdentifier
+  /// INCOME | EXPENSE | TRANSFER
+  type               String    @map("Type") @db.VarChar(10)
+  /// Sempre positivo; o tipo define o sinal
+  amount             Decimal   @map("Amount") @db.Decimal(19, 2)
+  description        String    @map("Description") @db.NVarChar(200)
+  notes              String?   @map("Notes") @db.NVarChar(1000)
+  /// Quando o gasto aconteceu (orçamento e relatórios)
+  competenceDate     DateTime  @map("CompetenceDate") @db.Date
+  /// Quando o dinheiro sai/entra na conta (saldo e projeção). Nulo em compras no cartão.
+  cashDate           DateTime? @map("CashDate") @db.Date
+  /// PLANNED | PAID
+  status             String    @map("Status") @db.VarChar(10)
+  invoiceId          String?   @map("InvoiceId") @db.UniqueIdentifier
+  /// Liga as duas pontas de uma transferência
+  transferGroupId    String?   @map("TransferGroupId") @db.UniqueIdentifier
+  recurrenceId       String?   @map("RecurrenceId") @db.UniqueIdentifier
+  /// Data prevista pela recorrência antes de qualquer edição
+  originalDate       DateTime? @map("OriginalDate") @db.Date
+  /// Editado individualmente: não é mais sobrescrito pela recorrência
+  detached           Boolean   @default(false) @map("Detached")
+  installmentGroupId String?   @map("InstallmentGroupId") @db.UniqueIdentifier
+  installmentNumber  Int?      @map("InstallmentNumber") @db.SmallInt
+  installmentTotal   Int?      @map("InstallmentTotal") @db.SmallInt
+  createdAt          DateTime  @default(now()) @map("CreatedAt") @db.DateTime2
+  updatedAt          DateTime  @updatedAt @map("UpdatedAt") @db.DateTime2
+
+  user       User        @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "FK_Transactions_Users")
+  account    Account     @relation(fields: [accountId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "FK_Transactions_Accounts")
+  category   Category?   @relation(fields: [categoryId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "FK_Transactions_Categories")
+  invoice    Invoice?    @relation(fields: [invoiceId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "FK_Transactions_Invoices")
+  recurrence Recurrence? @relation(fields: [recurrenceId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "FK_Transactions_Recurrences")
+
+  @@index([userId, cashDate], map: "IX_Transactions_UserId_CashDate")
+  @@index([userId, competenceDate], map: "IX_Transactions_UserId_CompetenceDate")
+  @@index([invoiceId], map: "IX_Transactions_InvoiceId")
+  @@index([recurrenceId], map: "IX_Transactions_RecurrenceId")
+  @@index([transferGroupId], map: "IX_Transactions_TransferGroupId")
+  @@index([installmentGroupId], map: "IX_Transactions_InstallmentGroupId")
+  @@map("Transactions")
+}
+
+model Recurrence {
+  id             String    @id @default(uuid()) @map("Id") @db.UniqueIdentifier
+  userId         String    @map("UserId") @db.UniqueIdentifier
+  accountId      String    @map("AccountId") @db.UniqueIdentifier
+  categoryId     String?   @map("CategoryId") @db.UniqueIdentifier
+  /// INCOME | EXPENSE
+  type           String    @map("Type") @db.VarChar(10)
+  amount         Decimal   @map("Amount") @db.Decimal(19, 2)
+  description    String    @map("Description") @db.NVarChar(200)
+  /// WEEKLY | MONTHLY | YEARLY
+  frequency      String    @map("Frequency") @db.VarChar(10)
+  /// Dia do mês (MONTHLY/YEARLY) ou da semana 0-6 (WEEKLY)
+  day            Int       @map("Day") @db.TinyInt
+  startDate      DateTime  @map("StartDate") @db.Date
+  endDate        DateTime? @map("EndDate") @db.Date
+  /// Até onde os lançamentos previstos já foram materializados
+  generatedUntil DateTime? @map("GeneratedUntil") @db.Date
+  createdAt      DateTime  @default(now()) @map("CreatedAt") @db.DateTime2
+  updatedAt      DateTime  @updatedAt @map("UpdatedAt") @db.DateTime2
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "FK_Recurrences_Users")
+  account      Account       @relation(fields: [accountId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "FK_Recurrences_Accounts")
+  category     Category?     @relation(fields: [categoryId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "FK_Recurrences_Categories")
+  transactions Transaction[]
+
+  @@index([userId], map: "IX_Recurrences_UserId")
+  @@map("Recurrences")
+}
+
+model Budget {
+  id          String   @id @default(uuid()) @map("Id") @db.UniqueIdentifier
+  userId      String   @map("UserId") @db.UniqueIdentifier
+  categoryId  String   @map("CategoryId") @db.UniqueIdentifier
+  /// YYYY-MM
+  month       String   @map("Month") @db.Char(7)
+  limitAmount Decimal  @map("LimitAmount") @db.Decimal(19, 2)
+  createdAt   DateTime @default(now()) @map("CreatedAt") @db.DateTime2
+  updatedAt   DateTime @updatedAt @map("UpdatedAt") @db.DateTime2
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "FK_Budgets_Users")
+  category Category @relation(fields: [categoryId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "FK_Budgets_Categories")
+
+  @@unique([userId, categoryId, month], map: "UQ_Budgets_User_Category_Month")
+  @@map("Budgets")
+}
