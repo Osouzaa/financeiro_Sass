@@ -24,6 +24,7 @@ import {
 } from 'recharts';
 import { useAuth } from '@/features/auth/auth-context';
 import { PageHeader } from '@/layout/AppLayout';
+import { useAccounts } from '@/features/accounts/account-meta';
 import { api } from '@/lib/api';
 
 const monthLabel = new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'numeric' }).format(
@@ -50,12 +51,19 @@ const FIRST_STEPS = [
 export function DashboardPage() {
   const { user } = useAuth();
   const firstName = user?.name.split(' ')[0];
+  const { data: accounts = [] } = useAccounts();
+
+  const cash = accounts.filter((a) => a.type !== 'CREDIT_CARD');
+  const cards = accounts.filter((a) => a.type === 'CREDIT_CARD');
+  const balance = cash.reduce((sum, a) => sum + a.balanceCents, 0);
+  const owed = cards.reduce((sum, a) => sum + a.balanceCents, 0);
+  const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
   return (
     <>
       <PageHeader
         title={`Olá, ${firstName}`}
-        description={`Resumo de ${monthLabel}. Os números aparecem assim que você cadastrar contas e lançamentos.`}
+        description={`Resumo de ${monthLabel}.`}
         actions={
           <Link
             to="/lancamentos"
@@ -70,8 +78,13 @@ export function DashboardPage() {
         <StatCard
           icon={Landmark}
           label="Saldo em contas"
-          value={0}
-          note="Nenhuma conta cadastrada"
+          value={balance}
+          note={
+            cash.length
+              ? `Em ${plural(cash.length, 'conta', 'contas')}`
+              : 'Nenhuma conta cadastrada'
+          }
+          to="/contas"
         />
         <StatCard
           icon={ArrowDownLeft}
@@ -87,12 +100,18 @@ export function DashboardPage() {
           note="Por data da compra"
           tone="negative"
         />
-        <StatCard icon={CreditCard} label="Faturas em aberto" value={0} note="Nenhum cartão" />
+        <StatCard
+          icon={CreditCard}
+          label="Faturas em aberto"
+          value={owed}
+          note={cards.length ? `Em ${plural(cards.length, 'cartão', 'cartões')}` : 'Nenhum cartão'}
+          to="/contas"
+        />
       </section>
 
       <div className="mt-4 grid gap-4 xl:grid-cols-3">
-        <ProjectionCard />
-        <FirstStepsCard />
+        <ProjectionCard hasAccounts={accounts.length > 0} />
+        <FirstStepsCard hasAccounts={accounts.length > 0} />
       </div>
 
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
@@ -109,35 +128,49 @@ function StatCard({
   value,
   note,
   tone = 'neutral',
+  to,
 }: {
   icon: LucideIcon;
   label: string;
   value: number;
   note: string;
   tone?: 'neutral' | 'positive' | 'negative';
+  /** Página com o detalhe do indicador; torna o card clicável. */
+  to?: string;
 }) {
   const chip = {
     neutral: 'bg-sunken text-steel',
     positive: 'bg-positive-soft text-positive',
     negative: 'bg-negative-soft text-negative',
   }[tone];
-  return (
-    <div className="card p-5">
+  const content = (
+    <>
       <div className="flex items-center justify-between">
         <span className="text-sm text-slate">{label}</span>
         <span className={`grid size-9 place-items-center rounded-[10px] ${chip}`}>
           <Icon size={18} strokeWidth={1.75} aria-hidden="true" />
         </span>
       </div>
-      <p className="tabular mt-3 font-display text-[28px] leading-none font-semibold tracking-[-0.02em]">
+      <p
+        className={`tabular mt-3 font-display text-[28px] leading-none font-semibold tracking-[-0.02em] ${
+          value < 0 && tone === 'neutral' ? 'text-negative' : ''
+        }`}
+      >
         {formatBRL(value)}
       </p>
       <p className="mt-2 text-[13px] text-faint">{note}</p>
-    </div>
+    </>
+  );
+  return to ? (
+    <Link to={to} className="card block p-5 transition-colors hover:border-line-strong">
+      {content}
+    </Link>
+  ) : (
+    <div className="card p-5">{content}</div>
   );
 }
 
-function ProjectionCard() {
+function ProjectionCard({ hasAccounts }: { hasAccounts: boolean }) {
   return (
     <section
       aria-labelledby="titulo-projecao"
@@ -194,18 +227,24 @@ function ProjectionCard() {
       <div className="absolute inset-x-6 top-1/2 mx-auto mt-4 max-w-sm -translate-y-1/2 rounded-[14px] border border-line bg-surface/95 p-5 text-center backdrop-blur-sm">
         <p className="font-semibold">Sua projeção aparece aqui</p>
         <p className="mt-1 text-sm text-slate">
-          Cadastre uma conta e suas recorrências para ver quanto vai sobrar no fim do mês.
+          {hasAccounts
+            ? 'Suas contas já estão cadastradas. A projeção começa a ser calculada com os lançamentos e recorrências, que entram na próxima etapa.'
+            : 'Cadastre uma conta e suas recorrências para ver quanto vai sobrar no fim do mês.'}
         </p>
-        <Link to="/contas" className="link-ember mt-3 inline-block text-sm">
-          Cadastrar primeira conta
-        </Link>
+        {!hasAccounts ? (
+          <Link to="/contas" className="link-ember mt-3 inline-block text-sm">
+            Cadastrar primeira conta
+          </Link>
+        ) : null}
       </div>
     </section>
   );
 }
 
-function FirstStepsCard() {
-  const done = 0;
+function FirstStepsCard({ hasAccounts }: { hasAccounts: boolean }) {
+  // Os demais passos são marcados conforme os módulos de lançamentos e orçamento entrarem
+  const completed = [hasAccounts, false, false, false];
+  const done = completed.filter(Boolean).length;
   return (
     <section aria-labelledby="titulo-passos" className="card p-6">
       <h2 id="titulo-passos" className="text-lg font-semibold">
@@ -230,7 +269,7 @@ function FirstStepsCard() {
               className="group flex items-center gap-3 rounded-[10px] px-2 py-2.5 transition-colors hover:bg-sunken"
             >
               <span className="tabular grid size-7 shrink-0 place-items-center rounded-full border border-line-strong text-[12px] text-slate group-hover:border-ember group-hover:text-ember">
-                {index < done ? <Check size={14} /> : index + 1}
+                {completed[index] ? <Check size={14} /> : index + 1}
               </span>
               <span className="text-sm">{step.title}</span>
             </Link>

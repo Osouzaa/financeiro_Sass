@@ -1,8 +1,11 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
+  Param,
+  ParseUUIDPipe,
   Post,
   Req,
   Res,
@@ -10,9 +13,12 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiBody, ApiCookieAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import {
+  changePasswordSchema,
   loginSchema,
   registerSchema,
   type AuthResponse,
+  type ChangePasswordInput,
+  type SessionDto,
   type LoginInput,
   type RegisterInput,
   type UserDto,
@@ -88,6 +94,46 @@ export class AuthController {
     const token = this.readRefreshCookie(req);
     if (token) await this.auth.logout(token);
     res.clearCookie(REFRESH_COOKIE, this.cookieOptions());
+  }
+
+  @Post('password')
+  @HttpCode(200)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Troca a senha e encerra as sessões em outros dispositivos' })
+  @ApiBody({ schema: openApiSchema(changePasswordSchema) })
+  async changePassword(
+    @CurrentUser() user: AuthUser,
+    @Body(new ZodValidationPipe(changePasswordSchema)) body: ChangePasswordInput,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<AuthResponse> {
+    return this.respond(res, await this.auth.changePassword(user.id, body, req.get('user-agent')));
+  }
+
+  @Get('sessions')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Dispositivos com sessão ativa' })
+  sessions(@CurrentUser() user: AuthUser, @Req() req: Request): Promise<SessionDto[]> {
+    return this.auth.listSessions(user.id, this.readRefreshCookie(req));
+  }
+
+  @Post('sessions/revoke-others')
+  @HttpCode(204)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Encerra as sessões de todos os outros dispositivos' })
+  revokeOthers(@CurrentUser() user: AuthUser, @Req() req: Request): Promise<void> {
+    return this.auth.revokeOtherSessions(user.id, this.readRefreshCookie(req));
+  }
+
+  @Delete('sessions/:id')
+  @HttpCode(204)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Encerra uma sessão específica' })
+  revokeSession(
+    @CurrentUser() user: AuthUser,
+    @Param('id', new ParseUUIDPipe()) id: string,
+  ): Promise<void> {
+    return this.auth.revokeSession(user.id, id);
   }
 
   @Get('me')

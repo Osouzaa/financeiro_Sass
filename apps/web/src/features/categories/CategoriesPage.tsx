@@ -2,7 +2,6 @@ import type { CategoryDto, CategoryType } from '@financeiro/shared';
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { api } from '@/lib/api';
-import { PageHeader } from '@/layout/AppLayout';
 import { categoryIcon } from './category-icons';
 
 const TABS: { type: CategoryType; label: string }[] = [
@@ -22,10 +21,10 @@ export function CategoriesPage() {
 
   return (
     <>
-      <PageHeader
-        title="Categorias"
-        description="Classificam receitas e despesas. Estas foram criadas para começar; edição e novas categorias chegam na próxima etapa."
-      />
+      <p className="mb-4 text-sm text-slate">
+        Classificam receitas e despesas. Estas foram criadas para começar; edição e novas categorias
+        chegam numa próxima etapa.
+      </p>
 
       <div className="card overflow-hidden">
         <div

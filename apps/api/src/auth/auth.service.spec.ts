@@ -10,7 +10,7 @@ import type { RefreshTokenService } from './refresh-token.service';
 const SECRET = 'segredo-de-teste-com-mais-de-32-caracteres';
 
 function setup() {
-  const user = { findUnique: jest.fn(), create: jest.fn() };
+  const user = { findUnique: jest.fn(), create: jest.fn(), update: jest.fn() };
   const tx = { user };
   const prisma = {
     user,
@@ -21,6 +21,7 @@ function setup() {
     issue: jest.fn().mockResolvedValue({ id: 'rt', token: 'refresh-token', expiresAt: new Date() }),
     rotate: jest.fn(),
     revoke: jest.fn(),
+    revokeAll: jest.fn(),
   };
   const categories = { createDefaults: jest.fn() };
   const jwt = new JwtService();
@@ -62,7 +63,12 @@ describe('AuthService', () => {
       const payload = await jwt.verifyAsync<JwtPayload>(session.accessToken, { secret: SECRET });
       expect(payload.sub).toBe('u1');
       expect(session.refreshToken).toBe('refresh-token');
-      expect(session.user).toEqual({ id: 'u1', name: 'Gabriel', email: 'gabriel@exemplo.com' });
+      expect(session.user).toEqual({
+        id: 'u1',
+        name: 'Gabriel',
+        email: 'gabriel@exemplo.com',
+        avatarVersion: null,
+      });
     });
   });
 
@@ -98,7 +104,12 @@ describe('AuthService', () => {
         passwordHash: await bcrypt.hash(input.password, 4),
       });
       const session = await service.login({ email: input.email, password: input.password });
-      expect(session.user).toEqual({ id: 'u1', name: 'G', email: input.email });
+      expect(session.user).toEqual({
+        id: 'u1',
+        name: 'G',
+        email: input.email,
+        avatarVersion: null,
+      });
       expect(session.user).not.toHaveProperty('passwordHash');
     });
   });
@@ -111,5 +122,43 @@ describe('AuthService', () => {
     const session = await service.refresh('antigo');
     expect(session.refreshToken).toBe('novo');
     expect(session.accessToken).toEqual(expect.any(String));
+  });
+
+  describe('changePassword', () => {
+    const change = {
+      currentPassword: 'senha1234',
+      newPassword: 'NovaSenha99',
+      confirmPassword: 'NovaSenha99',
+    };
+
+    it('recusa senha atual incorreta sem alterar nada', async () => {
+      const { service, user, refreshTokens } = setup();
+      user.findUnique.mockResolvedValue({
+        id: 'u1',
+        name: 'G',
+        email: input.email,
+        passwordHash: await bcrypt.hash('outra123', 4),
+      });
+      await expect(service.changePassword('u1', change)).rejects.toThrow('Senha atual incorreta');
+      expect(user.update).not.toHaveBeenCalled();
+      expect(refreshTokens.revokeAll).not.toHaveBeenCalled();
+    });
+
+    it('troca o hash, encerra todas as sessões e abre uma nova', async () => {
+      const { service, user, refreshTokens } = setup();
+      user.findUnique.mockResolvedValue({
+        id: 'u1',
+        name: 'G',
+        email: input.email,
+        passwordHash: await bcrypt.hash(change.currentPassword, 4),
+      });
+      const session = await service.changePassword('u1', change);
+
+      const { passwordHash } = user.update.mock.calls[0][0].data;
+      expect(await bcrypt.compare(change.newPassword, passwordHash)).toBe(true);
+      expect(refreshTokens.revokeAll).toHaveBeenCalledWith('u1');
+      expect(refreshTokens.issue).toHaveBeenCalled();
+      expect(session.refreshToken).toBe('refresh-token');
+    });
   });
 });

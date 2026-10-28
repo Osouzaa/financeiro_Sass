@@ -10,8 +10,8 @@
 //   então exclusões são feitas explicitamente pelos services.
 
 generator client {
-  provider     = "prisma-client"
-  output       = "../src/generated/prisma"
+  provider            = "prisma-client"
+  output              = "../src/generated/prisma"
   // CommonJS sem extensão nos imports, compatível com o build padrão do NestJS
   moduleFormat        = "cjs"
   importFileExtension = ""
@@ -22,12 +22,25 @@ datasource db {
 }
 
 model User {
-  id           String   @id @default(uuid()) @map("Id") @db.UniqueIdentifier
-  name         String   @map("Name") @db.NVarChar(100)
-  email        String   @unique(map: "UQ_Users_Email") @map("Email") @db.NVarChar(254)
-  passwordHash String   @map("PasswordHash") @db.NVarChar(100)
-  createdAt    DateTime @default(now()) @map("CreatedAt") @db.DateTime2
-  updatedAt    DateTime @updatedAt @map("UpdatedAt") @db.DateTime2
+  id           String @id @default(uuid()) @map("Id") @db.UniqueIdentifier
+  name         String @map("Name") @db.NVarChar(100)
+  email        String @unique(map: "UQ_Users_Email") @map("Email") @db.NVarChar(254)
+  passwordHash String @map("PasswordHash") @db.NVarChar(100)
+
+  /// Foto do perfil (JPEG/PNG/WebP de até 1 MB, já redimensionada pelo front)
+  avatarData      Bytes?    @map("AvatarData") @db.VarBinary(Max)
+  avatarMimeType  String?   @map("AvatarMimeType") @db.VarChar(20)
+  avatarUpdatedAt DateTime? @map("AvatarUpdatedAt") @db.DateTime2
+
+  /// Preferências de alertas
+  alertDueSoon         Boolean @default(true) @map("AlertDueSoon")
+  alertDueDays         Int     @default(3) @map("AlertDueDays") @db.TinyInt
+  alertBudget          Boolean @default(true) @map("AlertBudget")
+  alertBudgetPercent   Int     @default(80) @map("AlertBudgetPercent") @db.TinyInt
+  alertNegativeBalance Boolean @default(true) @map("AlertNegativeBalance")
+
+  createdAt DateTime @default(now()) @map("CreatedAt") @db.DateTime2
+  updatedAt DateTime @updatedAt @map("UpdatedAt") @db.DateTime2
 
   refreshTokens RefreshToken[]
   accounts      Account[]
@@ -155,6 +168,8 @@ model Transaction {
   invoiceId          String?   @map("InvoiceId") @db.UniqueIdentifier
   /// Liga as duas pontas de uma transferência
   transferGroupId    String?   @map("TransferGroupId") @db.UniqueIdentifier
+  /// Ponta da transferência: IN (entra nesta conta) | OUT (sai desta conta)
+  transferDirection  String?   @map("TransferDirection") @db.VarChar(3)
   recurrenceId       String?   @map("RecurrenceId") @db.UniqueIdentifier
   /// Data prevista pela recorrência antes de qualquer edição
   originalDate       DateTime? @map("OriginalDate") @db.Date

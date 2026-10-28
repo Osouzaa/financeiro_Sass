@@ -2,7 +2,12 @@ import { createBrowserRouter, Navigate, RouterProvider } from 'react-router';
 import { LoginPage } from '@/features/auth/LoginPage';
 import { RegisterPage } from '@/features/auth/RegisterPage';
 import { GuestOnly, RequireAuth } from '@/features/auth/route-guards';
+import { AccountsPage } from '@/features/accounts/AccountsPage';
 import { CategoriesPage } from '@/features/categories/CategoriesPage';
+import { AlertsPage } from '@/features/settings/AlertsPage';
+import { ProfilePage } from '@/features/settings/ProfilePage';
+import { SecurityPage } from '@/features/settings/SecurityPage';
+import { SettingsLayout } from '@/features/settings/SettingsLayout';
 import { AppLayout } from '@/layout/AppLayout';
 import { DashboardPage } from '@/pages/DashboardPage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
@@ -32,15 +37,7 @@ const router = createBrowserRouter([
               />
             ),
           },
-          {
-            path: 'contas',
-            element: (
-              <UpcomingPage
-                title="Contas e cartões"
-                description="Saldos das contas e limite disponível dos cartões, com acesso às faturas."
-              />
-            ),
-          },
+          { path: 'contas', element: <AccountsPage /> },
           {
             path: 'orcamento',
             element: (
@@ -68,8 +65,17 @@ const router = createBrowserRouter([
               />
             ),
           },
-          { path: 'configuracoes', element: <Navigate to="/configuracoes/categorias" replace /> },
-          { path: 'configuracoes/categorias', element: <CategoriesPage /> },
+          {
+            path: 'configuracoes',
+            element: <SettingsLayout />,
+            children: [
+              { index: true, element: <Navigate to="perfil" replace /> },
+              { path: 'perfil', element: <ProfilePage /> },
+              { path: 'seguranca', element: <SecurityPage /> },
+              { path: 'alertas', element: <AlertsPage /> },
+              { path: 'categorias', element: <CategoriesPage /> },
+            ],
+          },
         ],
       },
     ],

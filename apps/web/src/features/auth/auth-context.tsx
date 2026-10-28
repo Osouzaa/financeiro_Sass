@@ -1,4 +1,10 @@
-import type { AuthResponse, LoginInput, RegisterInput, UserDto } from '@financeiro/shared';
+import type {
+  AuthResponse,
+  ChangePasswordInput,
+  LoginInput,
+  RegisterInput,
+  UserDto,
+} from '@financeiro/shared';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   createContext,
@@ -19,6 +25,10 @@ interface AuthContextValue {
   login: (input: LoginInput) => Promise<void>;
   register: (input: RegisterInput) => Promise<void>;
   logout: () => Promise<void>;
+  /** Atualiza os dados do usuário em memória (após editar perfil ou foto). */
+  updateUser: (user: UserDto) => void;
+  /** Troca a senha; a API devolve uma sessão nova para este dispositivo. */
+  changePassword: (input: ChangePasswordInput) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -66,9 +76,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSession(null);
   }, []);
 
+  const updateUser = useCallback((next: UserDto) => setUser(next), []);
+
+  const changePassword = useCallback(async (input: ChangePasswordInput) => {
+    setSession(await api<AuthResponse>('/auth/password', { method: 'POST', body: input }));
+  }, []);
+
   const value = useMemo(
-    () => ({ status, user, login, register, logout }),
-    [status, user, login, register, logout],
+    () => ({ status, user, login, register, logout, updateUser, changePassword }),
+    [status, user, login, register, logout, updateUser, changePassword],
   );
 
   return <AuthContext value={value}>{children}</AuthContext>;

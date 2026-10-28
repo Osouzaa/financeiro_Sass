@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { useState, type MouseEvent, type ReactNode } from 'react';
 import { Link, NavLink, Outlet } from 'react-router';
+import { Avatar } from '@/components/Avatar';
 import { Logo } from '@/components/Logo';
 import { useAuth } from '@/features/auth/auth-context';
 
@@ -56,13 +57,6 @@ export function AppLayout() {
     if ((event.target as HTMLElement).closest('a')) setMenuOpen(false);
   };
 
-  const initials = user?.name
-    .split(' ')
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase())
-    .join('');
-
   return (
     <div className="min-h-dvh lg:grid lg:grid-cols-[264px_minmax(0,1fr)]">
       <a
@@ -88,7 +82,7 @@ export function AppLayout() {
         aria-label="Menu"
         onClick={closeOnNavigate}
       >
-        <div className="flex h-[72px] items-center justify-between px-6">
+        <div className="flex h-16 items-center justify-between px-6">
           <Link to="/" aria-label="Financeiro, visão geral">
             <Logo size={28} tone="light" />
           </Link>
@@ -121,14 +115,18 @@ export function AppLayout() {
           <SidebarLink to="/configuracoes" label="Configurações" icon={Settings} />
         </div>
 
-        <div className="flex items-center gap-3 border-t border-night-line px-5 py-4">
-          <span className="grid size-9 shrink-0 place-items-center rounded-full bg-ember font-display text-sm font-semibold text-white">
-            {initials}
-          </span>
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium">{user?.name}</p>
-            <p className="truncate text-[12px] text-white/45">{user?.email}</p>
-          </div>
+        <div className="flex items-center gap-2 border-t border-night-line px-3 py-3">
+          <Link
+            to="/configuracoes/perfil"
+            className="flex min-w-0 flex-1 items-center gap-3 rounded-[10px] px-2 py-1.5 transition-colors hover:bg-night-raised"
+            title="Meu perfil"
+          >
+            <Avatar user={user} size={36} />
+            <span className="min-w-0">
+              <span className="block truncate text-sm font-medium">{user?.name}</span>
+              <span className="block truncate text-[12px] text-white/45">{user?.email}</span>
+            </span>
+          </Link>
           <button
             type="button"
             onClick={() => void logout()}
@@ -142,7 +140,7 @@ export function AppLayout() {
       </aside>
 
       <div className="flex min-w-0 flex-col">
-        <header className="sticky top-0 z-20 flex h-[72px] items-center gap-3 border-b border-line bg-canvas/85 px-5 backdrop-blur sm:px-8">
+        <header className="sticky top-0 z-20 flex h-16 items-center gap-3 border-b border-line bg-canvas/85 px-5 backdrop-blur sm:px-8">
           <button
             type="button"
             onClick={() => setMenuOpen(true)}
@@ -160,10 +158,7 @@ export function AppLayout() {
           </p>
         </header>
 
-        <main
-          id="conteudo"
-          className="w-full flex-1 px-5 py-8 sm:px-8 lg:px-10 lg:py-10"
-        >
+        <main id="conteudo" className="w-full flex-1 px-5 pt-5 pb-10 sm:px-8 lg:px-10 lg:pt-6">
           <Outlet />
         </main>
       </div>
@@ -209,7 +204,7 @@ export function PageHeader({
   actions?: ReactNode;
 }) {
   return (
-    <header className="mb-8 flex flex-wrap items-end justify-between gap-4">
+    <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
       <div>
         <h1 className="text-[28px] leading-tight font-semibold sm:text-[32px]">{title}</h1>
         {description ? (

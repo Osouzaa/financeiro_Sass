@@ -56,23 +56,25 @@ export function refreshSession(): Promise<AuthResponse | null> {
 
 interface RequestOptions {
   method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+  /** Objeto (enviado como JSON) ou FormData (upload de arquivo). */
   body?: unknown;
   /** false nas rotas de login/cadastro: um 401 ali é erro de credencial, não sessão expirada. */
   retryOnUnauthorized?: boolean;
 }
 
-export async function api<T>(path: string, options: RequestOptions = {}): Promise<T> {
+async function request(path: string, options: RequestOptions): Promise<Response> {
   const { method = 'GET', body, retryOnUnauthorized = true } = options;
+  const isForm = body instanceof FormData;
 
   const send = () =>
     fetch(`${BASE_URL}${path}`, {
       method,
       credentials: 'include',
       headers: {
-        ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+        ...(body !== undefined && !isForm ? { 'Content-Type': 'application/json' } : {}),
         ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
       },
-      body: body !== undefined ? JSON.stringify(body) : undefined,
+      body: body === undefined ? undefined : isForm ? body : JSON.stringify(body),
     });
 
   let response: Response;
@@ -98,7 +100,16 @@ export async function api<T>(path: string, options: RequestOptions = {}): Promis
       error?.fields ?? {},
     );
   }
+  return response;
+}
 
+export async function api<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  const response = await request(path, options);
   if (response.status === 204) return undefined as T;
   return (await response.json()) as T;
+}
+
+/** Baixa um arquivo autenticado (ex.: foto do perfil). */
+export async function apiBlob(path: string): Promise<Blob> {
+  return (await request(path, {})).blob();
 }

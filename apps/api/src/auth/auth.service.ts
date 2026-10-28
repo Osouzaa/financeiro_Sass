@@ -1,19 +1,24 @@
-import { ConflictException, Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import type { LoginInput, RegisterInput, UserDto } from '@financeiro/shared';
-import * as bcrypt from 'bcryptjs';
+import type {
+  ChangePasswordInput,
+  LoginInput,
+  RegisterInput,
+  SessionDto,
+  UserDto,
+} from '@financeiro/shared';
 import { CategoriesService } from '../categories/categories.service';
 import { AppConfig } from '../config/app-config';
 import { PrismaService } from '../prisma/prisma.service';
-import { RefreshTokenService } from './refresh-token.service';
-
-const BCRYPT_COST = 12;
-
-/**
- * Hash de uma senha qualquer, usado quando o e-mail não existe.
- * Assim o login leva o mesmo tempo nos dois casos e não revela quais e-mails estão cadastrados.
- */
-const DUMMY_HASH = '$2b$12$/pelSEX1kDoOaYyLcatROe4tC9ik3luUZf0LbL38Ra2b8Mr5ykoyq';
+import { hashPassword, verifyPassword } from './password';
+import { hashToken, RefreshTokenService } from './refresh-token.service';
+import { toUserDto, USER_SELECT } from './user-dto';
 
 export interface Session {
   accessToken: string;
@@ -45,30 +50,30 @@ export class AuthService {
     });
     if (existing) throw new ConflictException('Este e-mail já está cadastrado');
 
-    const passwordHash = await bcrypt.hash(input.password, BCRYPT_COST);
+    const passwordHash = await hashPassword(input.password);
 
     const user = await this.prisma.$transaction(async (tx) => {
       const created = await tx.user.create({
         data: { name: input.name, email: input.email, passwordHash },
-        select: { id: true, name: true, email: true },
+        select: USER_SELECT,
       });
       await this.categories.createDefaults(tx, created.id);
       return created;
     });
 
-    return this.createSession(user, userAgent);
+    return this.createSession(toUserDto(user), userAgent);
   }
 
   async login(input: LoginInput, userAgent?: string): Promise<Session> {
     const user = await this.prisma.user.findUnique({
       where: { email: input.email },
-      select: { id: true, name: true, email: true, passwordHash: true },
+      select: { ...USER_SELECT, passwordHash: true },
     });
 
-    const valid = await bcrypt.compare(input.password, user?.passwordHash ?? DUMMY_HASH);
+    const valid = await verifyPassword(input.password, user?.passwordHash);
     if (!user || !valid) throw new UnauthorizedException('E-mail ou senha inválidos');
 
-    return this.createSession({ id: user.id, name: user.name, email: user.email }, userAgent);
+    return this.createSession(toUserDto(user), userAgent);
   }
 
   async refresh(refreshToken: string, userAgent?: string): Promise<Session> {
@@ -86,13 +91,78 @@ export class AuthService {
     return this.refreshTokens.revoke(refreshToken);
   }
 
+  /**
+   * Troca a senha, encerra todas as sessões (inclusive em outros dispositivos)
+   * e abre uma sessão nova para este dispositivo.
+   */
+  async changePassword(
+    userId: string,
+    input: ChangePasswordInput,
+    userAgent?: string,
+  ): Promise<Session> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { ...USER_SELECT, passwordHash: true },
+    });
+    if (!user) throw new UnauthorizedException('Usuário não encontrado');
+
+    if (!(await verifyPassword(input.currentPassword, user.passwordHash))) {
+      // 400, e não 401: um 401 faria o front tentar renovar a sessão
+      throw new BadRequestException({
+        message: 'Senha atual incorreta',
+        fields: { currentPassword: ['Senha atual incorreta'] },
+      });
+    }
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { passwordHash: await hashPassword(input.newPassword) },
+    });
+    await this.refreshTokens.revokeAll(userId);
+    return this.createSession(toUserDto(user), userAgent);
+  }
+
+  async listSessions(userId: string, currentToken?: string): Promise<SessionDto[]> {
+    const currentHash = currentToken ? hashToken(currentToken) : undefined;
+    const tokens = await this.prisma.refreshToken.findMany({
+      where: { userId, revokedAt: null, expiresAt: { gt: new Date() } },
+      select: { id: true, userAgent: true, createdAt: true, tokenHash: true },
+      orderBy: { createdAt: 'desc' },
+    });
+    return tokens.map((token) => ({
+      id: token.id,
+      userAgent: token.userAgent,
+      createdAt: token.createdAt.toISOString(),
+      current: token.tokenHash === currentHash,
+    }));
+  }
+
+  async revokeSession(userId: string, sessionId: string): Promise<void> {
+    const result = await this.prisma.refreshToken.updateMany({
+      where: { id: sessionId, userId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+    if (result.count === 0) throw new NotFoundException('Sessão não encontrada');
+  }
+
+  async revokeOtherSessions(userId: string, currentToken?: string): Promise<void> {
+    await this.prisma.refreshToken.updateMany({
+      where: {
+        userId,
+        revokedAt: null,
+        ...(currentToken ? { NOT: { tokenHash: hashToken(currentToken) } } : {}),
+      },
+      data: { revokedAt: new Date() },
+    });
+  }
+
   async getUser(userId: string): Promise<UserDto> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      select: { id: true, name: true, email: true },
+      select: USER_SELECT,
     });
     if (!user) throw new UnauthorizedException('Usuário não encontrado');
-    return user;
+    return toUserDto(user);
   }
 
   private async createSession(user: UserDto, userAgent?: string): Promise<Session> {

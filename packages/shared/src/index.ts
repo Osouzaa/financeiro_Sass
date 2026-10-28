@@ -4,4 +4,6 @@ export * from './money';
 export * from './billing';
 export * from './installments';
 export * from './schemas/auth';
+export * from './schemas/profile';
+export * from './schemas/account';
 export * from './types';
