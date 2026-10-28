@@ -1,21 +1,61 @@
-import { LogOut } from 'lucide-react';
-import type { ReactNode } from 'react';
+import {
+  ArrowLeftRight,
+  CalendarRange,
+  LayoutDashboard,
+  LogOut,
+  Menu,
+  PiggyBank,
+  Settings,
+  TrendingUp,
+  Wallet,
+  X,
+  type LucideIcon,
+} from 'lucide-react';
+import { useState, type MouseEvent, type ReactNode } from 'react';
 import { Link, NavLink, Outlet } from 'react-router';
 import { Logo } from '@/components/Logo';
 import { useAuth } from '@/features/auth/auth-context';
 
-const NAV_ITEMS = [
-  { to: '/', label: 'Visão geral' },
-  { to: '/lancamentos', label: 'Lançamentos' },
-  { to: '/contas', label: 'Contas e cartões' },
-  { to: '/orcamento', label: 'Orçamento' },
-  { to: '/projecao', label: 'Projeção' },
-  { to: '/recorrencias', label: 'Recorrências' },
-  { to: '/configuracoes', label: 'Configurações' },
+interface NavItem {
+  to: string;
+  label: string;
+  icon: LucideIcon;
+}
+
+const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
+  {
+    title: 'Principal',
+    items: [
+      { to: '/', label: 'Visão geral', icon: LayoutDashboard },
+      { to: '/lancamentos', label: 'Lançamentos', icon: ArrowLeftRight },
+      { to: '/contas', label: 'Contas e cartões', icon: Wallet },
+      { to: '/projecao', label: 'Projeção', icon: TrendingUp },
+    ],
+  },
+  {
+    title: 'Planejamento',
+    items: [
+      { to: '/orcamento', label: 'Orçamento', icon: PiggyBank },
+      { to: '/recorrencias', label: 'Recorrências', icon: CalendarRange },
+    ],
+  },
 ];
+
+const today = new Intl.DateTimeFormat('pt-BR', {
+  weekday: 'long',
+  day: 'numeric',
+  month: 'long',
+}).format(new Date());
 
 export function AppLayout() {
   const { user, logout } = useAuth();
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  // Fecha o menu do celular ao clicar em qualquer link dele
+  const closeOnNavigate = (event: MouseEvent) => {
+    if ((event.target as HTMLElement).closest('a')) setMenuOpen(false);
+  };
+
   const initials = user?.name
     .split(' ')
     .filter(Boolean)
@@ -24,93 +64,159 @@ export function AppLayout() {
     .join('');
 
   return (
-    <div className="min-h-dvh bg-canvas">
+    <div className="min-h-dvh lg:grid lg:grid-cols-[264px_minmax(0,1fr)]">
       <a
         href="#conteudo"
-        className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:bg-graphite focus:px-4 focus:py-2 focus:text-canvas"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:rounded-[10px] focus:bg-graphite focus:px-4 focus:py-2 focus:text-white"
       >
         Pular para o conteúdo
       </a>
 
-      <header className="border-b border-mist">
-        <div className="mx-auto flex max-w-[1200px] flex-wrap items-center gap-x-6 gap-y-3 px-5 py-4 sm:px-8">
-          <Link to="/" aria-label="Financeiro, visão geral" className="shrink-0">
-            <Logo size={28} />
+      {/* Fundo escurecido do menu no celular */}
+      {menuOpen ? (
+        <div
+          className="fixed inset-0 z-30 bg-black/40 lg:hidden"
+          onClick={() => setMenuOpen(false)}
+          aria-hidden="true"
+        />
+      ) : null}
+
+      <aside
+        className={`dot-grid fixed inset-y-0 left-0 z-40 flex w-[264px] flex-col bg-night text-white transition-transform lg:sticky lg:top-0 lg:h-dvh lg:translate-x-0 ${
+          menuOpen ? 'translate-x-0' : '-translate-x-full'
+        }`}
+        aria-label="Menu"
+        onClick={closeOnNavigate}
+      >
+        <div className="flex h-[72px] items-center justify-between px-6">
+          <Link to="/" aria-label="Financeiro, visão geral">
+            <Logo size={28} tone="light" />
           </Link>
-
-          <nav
-            aria-label="Principal"
-            className="order-last -mx-5 w-[calc(100%+2.5rem)] overflow-x-auto px-5 sm:-mx-8 sm:w-[calc(100%+4rem)] sm:px-8 xl:order-none xl:mx-auto xl:w-auto xl:overflow-visible xl:px-0"
+          <button
+            type="button"
+            onClick={() => setMenuOpen(false)}
+            className="grid size-9 place-items-center rounded-[10px] text-white/60 hover:bg-night-raised hover:text-white lg:hidden"
+            aria-label="Fechar menu"
           >
-            <ul className="flex w-max gap-1 rounded-[200px] bg-ash p-1.5">
-              {NAV_ITEMS.map(({ to, label }) => (
-                <li key={to}>
-                  <NavLink
-                    to={to}
-                    end={to === '/'}
-                    className={({ isActive }) =>
-                      `block rounded-[200px] px-4 py-2 font-display text-[15px] leading-none tracking-[-0.02em] whitespace-nowrap transition-colors ${
-                        isActive
-                          ? 'bg-canvas text-graphite'
-                          : 'text-steel hover:bg-canvas/60 hover:text-graphite'
-                      }`
-                    }
-                  >
-                    {label}
-                  </NavLink>
-                </li>
-              ))}
-            </ul>
-          </nav>
-
-          <div className="ml-auto flex items-center gap-1 xl:ml-0">
-            <span
-              className="grid size-9 place-items-center rounded-full bg-ivory font-display text-sm text-graphite"
-              title={`${user?.name ?? ''} · ${user?.email ?? ''}`}
-            >
-              <span aria-hidden="true">{initials}</span>
-              <span className="sr-only">
-                Conectado como {user?.name} ({user?.email})
-              </span>
-            </span>
-            <button
-              type="button"
-              onClick={() => void logout()}
-              className="grid size-9 place-items-center rounded-full text-steel transition-colors hover:bg-ash hover:text-graphite"
-              aria-label="Sair"
-              title="Sair"
-            >
-              <LogOut size={18} strokeWidth={1.5} />
-            </button>
-          </div>
+            <X size={20} />
+          </button>
         </div>
-      </header>
 
-      <main id="conteudo" className="mx-auto max-w-[1200px] px-5 py-10 sm:px-8 lg:py-16">
-        <Outlet />
-      </main>
+        <nav aria-label="Principal" className="flex-1 overflow-y-auto px-3 py-4">
+          {NAV_GROUPS.map((group) => (
+            <div key={group.title} className="mb-6">
+              <p className="px-3 pb-2 text-[12px] font-medium text-white/35">{group.title}</p>
+              <ul className="space-y-0.5">
+                {group.items.map((item) => (
+                  <li key={item.to}>
+                    <SidebarLink {...item} />
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </nav>
+
+        <div className="border-t border-night-line px-3 py-3">
+          <SidebarLink to="/configuracoes" label="Configurações" icon={Settings} />
+        </div>
+
+        <div className="flex items-center gap-3 border-t border-night-line px-5 py-4">
+          <span className="grid size-9 shrink-0 place-items-center rounded-full bg-ember font-display text-sm font-semibold text-white">
+            {initials}
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-medium">{user?.name}</p>
+            <p className="truncate text-[12px] text-white/45">{user?.email}</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => void logout()}
+            className="grid size-9 place-items-center rounded-[10px] text-white/55 transition-colors hover:bg-night-raised hover:text-white"
+            aria-label="Sair"
+            title="Sair"
+          >
+            <LogOut size={18} strokeWidth={1.75} />
+          </button>
+        </div>
+      </aside>
+
+      <div className="flex min-w-0 flex-col">
+        <header className="sticky top-0 z-20 flex h-[72px] items-center gap-3 border-b border-line bg-canvas/85 px-5 backdrop-blur sm:px-8">
+          <button
+            type="button"
+            onClick={() => setMenuOpen(true)}
+            className="grid size-10 place-items-center rounded-[10px] border border-line bg-surface text-steel lg:hidden"
+            aria-label="Abrir menu"
+            aria-expanded={menuOpen}
+          >
+            <Menu size={20} />
+          </button>
+          <Link to="/" className="lg:hidden" aria-label="Financeiro, visão geral">
+            <Logo size={26} />
+          </Link>
+          <p className="ml-auto hidden text-sm text-slate first-letter:uppercase sm:block lg:ml-0">
+            {today}
+          </p>
+        </header>
+
+        <main
+          id="conteudo"
+          className="mx-auto w-full max-w-[1280px] flex-1 px-5 py-8 sm:px-8 lg:py-10"
+        >
+          <Outlet />
+        </main>
+      </div>
     </div>
+  );
+}
+
+function SidebarLink({ to, label, icon: Icon }: NavItem) {
+  return (
+    <NavLink
+      to={to}
+      end={to === '/'}
+      className={({ isActive }) =>
+        `relative flex items-center gap-3 rounded-[10px] px-3 py-2.5 text-[14px] transition-colors ${
+          isActive
+            ? 'bg-night-raised font-medium text-white before:absolute before:top-2 before:bottom-2 before:-left-3 before:w-[3px] before:rounded-r-full before:bg-ember'
+            : 'text-white/60 hover:bg-night-raised/60 hover:text-white'
+        }`
+      }
+    >
+      {({ isActive }) => (
+        <>
+          <Icon
+            size={18}
+            strokeWidth={1.75}
+            className={isActive ? 'text-ember' : ''}
+            aria-hidden="true"
+          />
+          {label}
+        </>
+      )}
+    </NavLink>
   );
 }
 
 export function PageHeader({
   title,
   description,
-  aside,
+  actions,
 }: {
   title: string;
   description?: string;
-  aside?: ReactNode;
+  actions?: ReactNode;
 }) {
   return (
-    <header className="mb-10 flex flex-wrap items-end justify-between gap-6 lg:mb-14">
+    <header className="mb-8 flex flex-wrap items-end justify-between gap-4">
       <div>
-        <h1 className="text-[clamp(2rem,4vw,2.5rem)] leading-[1.2]">{title}</h1>
+        <h1 className="text-[28px] leading-tight font-semibold sm:text-[32px]">{title}</h1>
         {description ? (
-          <p className="mt-3 max-w-[62ch] text-lg leading-snug text-steel">{description}</p>
+          <p className="mt-1.5 max-w-[64ch] text-[15px] text-slate">{description}</p>
         ) : null}
       </div>
-      {aside}
+      {actions ? <div className="flex gap-2">{actions}</div> : null}
     </header>
   );
 }

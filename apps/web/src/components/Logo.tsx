@@ -1,11 +1,20 @@
 /**
  * Logo do Financeiro.
  *
- * A marca é um bloco grafite com o canto superior esquerdo arredondado (o mesmo
- * canto assimétrico dos cards) e uma linha de saldo que termina num ponto laranja:
- * o saldo do dia 30, que é a pergunta que o produto responde.
+ * Bloco com o canto superior esquerdo arredondado e uma linha de saldo que
+ * termina num ponto laranja: o saldo projetado, que é o centro do produto.
  */
-export function LogoMark({ size = 32, className = '' }: { size?: number; className?: string }) {
+export function LogoMark({
+  size = 32,
+  tone = 'dark',
+  className = '',
+}: {
+  size?: number;
+  tone?: 'dark' | 'light';
+  className?: string;
+}) {
+  const block = tone === 'dark' ? '#1d1d1f' : '#ffffff';
+  const line = tone === 'dark' ? '#ffffff' : '#1d1d1f';
   return (
     <svg
       width={size}
@@ -15,11 +24,11 @@ export function LogoMark({ size = 32, className = '' }: { size?: number; classNa
       aria-hidden="true"
       focusable="false"
     >
-      <path d="M8 0H32V32H0V8A8 8 0 0 1 8 0Z" fill="#202020" />
+      <path d="M9 0H32V32H0V9A9 9 0 0 1 9 0Z" fill={block} />
       <path
         d="M6.5 21.5L12 16l4.5 3.5L23 11"
         fill="none"
-        stroke="#ffffff"
+        stroke={line}
         strokeWidth="2.25"
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -29,13 +38,23 @@ export function LogoMark({ size = 32, className = '' }: { size?: number; classNa
   );
 }
 
-export function Logo({ size = 28, className = '' }: { size?: number; className?: string }) {
+export function Logo({
+  size = 28,
+  tone = 'dark',
+  className = '',
+}: {
+  size?: number;
+  tone?: 'dark' | 'light';
+  className?: string;
+}) {
   return (
     <span className={`inline-flex items-center gap-2.5 ${className}`}>
-      <LogoMark size={size} />
+      <LogoMark size={size} tone={tone} />
       <span
-        className="font-display leading-none tracking-[-0.03em] text-graphite"
-        style={{ fontSize: size * 0.72 }}
+        className={`font-display font-semibold leading-none tracking-[-0.03em] ${
+          tone === 'dark' ? 'text-graphite' : 'text-white'
+        }`}
+        style={{ fontSize: size * 0.68 }}
       >
         financeiro
       </span>
