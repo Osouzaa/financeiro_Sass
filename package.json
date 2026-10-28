@@ -8,11 +8,12 @@
     "node": ">=22"
   },
   "scripts": {
-    "dev": "turbo run dev",
-    "build": "turbo run build",
-    "test": "turbo run test",
-    "lint": "turbo run lint",
-    "typecheck": "turbo run typecheck",
+    "dev": "pnpm build:shared && pnpm -r --parallel run dev",
+    "build": "pnpm -r run build",
+    "build:shared": "pnpm --filter @financeiro/shared build",
+    "test": "pnpm build:shared && pnpm -r run test",
+    "lint": "pnpm build:shared && pnpm -r run lint",
+    "typecheck": "pnpm build:shared && pnpm -r run typecheck",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "db:up": "docker compose up -d",
@@ -28,7 +29,6 @@
     "eslint-plugin-react-refresh": "^0.5.7",
     "globals": "^17.13.0",
     "prettier": "^3.9.10",
-    "turbo": "^2.11.10",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.72.1"
   }
