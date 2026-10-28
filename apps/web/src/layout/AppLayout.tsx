@@ -162,7 +162,7 @@ export function AppLayout() {
 
         <main
           id="conteudo"
-          className="mx-auto w-full max-w-[1280px] flex-1 px-5 py-8 sm:px-8 lg:py-10"
+          className="w-full flex-1 px-5 py-8 sm:px-8 lg:px-10 lg:py-10"
         >
           <Outlet />
         </main>
