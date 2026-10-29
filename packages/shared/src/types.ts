@@ -9,6 +9,7 @@ import type {
 import type {
   PlanInterval,
   PlanLimits,
+  PaymentStatus,
   SubscriptionStatus,
   UserRole,
   UserStatus,
@@ -267,6 +268,7 @@ export interface PlanDto {
   isActive: boolean;
   highlighted: boolean;
   sortOrder: number;
+  trialDays: number;
   features: string[];
   limits: PlanLimits;
 }
@@ -284,9 +286,17 @@ export interface MyPlanDto {
   subscription: {
     status: SubscriptionStatus;
     currentPeriodEnd: string | null;
+    /** MANUAL (definida pelo super admin) ou MERCADO_PAGO. */
     provider: string;
+    trialEndsAt: string | null;
   } | null;
   usage: PlanUsageDto;
+  billing: {
+    /** Pagamento configurado na API (credenciais do Mercado Pago presentes). */
+    enabled: boolean;
+    /** A pessoa ainda não usou o teste grátis. */
+    trialAvailable: boolean;
+  };
 }
 
 export interface AdminUserDto {
@@ -299,6 +309,8 @@ export interface AdminUserDto {
   status: UserStatus;
   plan: { id: string; code: string; name: string };
   subscriptionStatus: SubscriptionStatus | null;
+  /** MANUAL ou MERCADO_PAGO; null sem assinatura. */
+  subscriptionProvider: string | null;
   currentPeriodEnd: string | null;
   createdAt: string;
   usage: PlanUsageDto;
@@ -328,6 +340,54 @@ export interface AuditEntryDto {
   targetId: string | null;
   details: string | null;
   createdAt: string;
+}
+
+export interface CheckoutDto {
+  /** Página do Mercado Pago onde a pessoa informa o cartão. */
+  url: string;
+}
+
+export interface PaymentDto {
+  id: string;
+  amountCents: number;
+  status: PaymentStatus;
+  description: string;
+  /** Quando foi aprovado; null se ainda não foi. */
+  paidAt: string | null;
+  createdAt: string;
+}
+
+export interface AdminPaymentDto extends PaymentDto {
+  user: { id: string; name: string; email: string } | null;
+  /** E-mail no momento do pagamento (fica mesmo se a conta for excluída). */
+  payerEmail: string | null;
+  providerPaymentId: string;
+}
+
+export interface WebhookEventDto {
+  id: string;
+  type: string;
+  resourceId: string | null;
+  /** RECEIVED | PROCESSED | IGNORED | FAILED | REJECTED (assinatura inválida) */
+  status: string;
+  error: string | null;
+  createdAt: string;
+}
+
+export interface AdminBillingDto {
+  configured: boolean;
+  /** Credencial de teste (sandbox) ou de produção. */
+  mode: 'test' | 'production' | null;
+  /** Endereço a cadastrar nos webhooks do Mercado Pago; null se API_PUBLIC_URL não estiver definida. */
+  webhookUrl: string | null;
+  webhookSecretConfigured: boolean;
+  revenueMonthCents: number;
+  approvedMonth: number;
+  failedMonth: number;
+  trialing: number;
+  active: number;
+  pastDue: number;
+  events: WebhookEventDto[];
 }
 
 /** Erro de limite do plano: o front mostra o convite para trocar de plano. */

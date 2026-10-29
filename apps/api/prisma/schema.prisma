@@ -46,6 +46,8 @@ model User {
   termsVersion    String?   @map("TermsVersion") @db.VarChar(20)
   /// USER | SUPER_ADMIN
   role            String    @default("USER") @map("Role") @db.VarChar(20)
+  /// Quando usou o teste grátis (um por pessoa, para sempre)
+  trialUsedAt     DateTime? @map("TrialUsedAt") @db.DateTime2
   /// ACTIVE | SUSPENDED
   status          String    @default("ACTIVE") @map("Status") @db.VarChar(20)
 
@@ -59,6 +61,8 @@ model User {
   emailTokens   EmailVerificationToken[]
   subscription  Subscription?
   auditEntries  AdminAuditLog[]
+  checkouts     CheckoutSession[]
+  payments      Payment[]
   accounts      Account[]
   categories    Category[]
   invoices      Invoice[]
@@ -126,10 +130,13 @@ model Plan {
   maxBudgets     Int?     @map("MaxBudgets")
   projectionDays Int      @default(30) @map("ProjectionDays")
   whatsapp       Boolean  @default(false) @map("Whatsapp")
+  /// Dias grátis na primeira assinatura
+  trialDays      Int      @default(0) @map("TrialDays")
   createdAt      DateTime @default(now()) @map("CreatedAt") @db.DateTime2
   updatedAt      DateTime @updatedAt @map("UpdatedAt") @db.DateTime2
 
   subscriptions Subscription[]
+  checkouts     CheckoutSession[]
 
   @@map("Plans")
 }
@@ -146,6 +153,9 @@ model Subscription {
   provider         String    @default("MANUAL") @map("Provider") @db.VarChar(20)
   /// Id da assinatura no provedor de pagamento
   providerRef      String?   @map("ProviderRef") @db.VarChar(100)
+  /// Fim do teste grátis, se a assinatura começou com teste
+  trialEndsAt      DateTime? @map("TrialEndsAt") @db.Date
+  canceledAt       DateTime? @map("CanceledAt") @db.DateTime2
   createdAt        DateTime  @default(now()) @map("CreatedAt") @db.DateTime2
   updatedAt        DateTime  @updatedAt @map("UpdatedAt") @db.DateTime2
 
@@ -154,6 +164,74 @@ model Subscription {
 
   @@index([planId], map: "IX_Subscriptions_PlanId")
   @@map("Subscriptions")
+}
+
+/// Cada ida ao Mercado Pago para assinar. O id vai como external_reference: é ele
+/// que liga a assinatura do Mercado Pago ao usuário, sem depender do e-mail.
+model CheckoutSession {
+  id          String   @id @default(uuid()) @map("Id") @db.UniqueIdentifier
+  userId      String   @map("UserId") @db.UniqueIdentifier
+  planId      String   @map("PlanId") @db.UniqueIdentifier
+  /// PENDING | AUTHORIZED | CANCELED
+  status      String   @default("PENDING") @map("Status") @db.VarChar(20)
+  trialDays   Int      @default(0) @map("TrialDays")
+  amount      Decimal  @map("Amount") @db.Decimal(19, 2)
+  /// Id da assinatura (preapproval) no Mercado Pago
+  providerRef String?  @unique(map: "UQ_CheckoutSessions_ProviderRef") @map("ProviderRef") @db.VarChar(100)
+  initPoint   String?  @map("InitPoint") @db.NVarChar(500)
+  createdAt   DateTime @default(now()) @map("CreatedAt") @db.DateTime2
+  updatedAt   DateTime @updatedAt @map("UpdatedAt") @db.DateTime2
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "FK_CheckoutSessions_Users")
+  plan Plan @relation(fields: [planId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "FK_CheckoutSessions_Plans")
+
+  @@index([userId], map: "IX_CheckoutSessions_UserId")
+  @@map("CheckoutSessions")
+}
+
+/// Cobrança feita pelo provedor. Registro financeiro: fica mesmo se a conta for excluída.
+model Payment {
+  id                String    @id @default(uuid()) @map("Id") @db.UniqueIdentifier
+  /// Nulo se a conta foi excluída depois
+  userId            String?   @map("UserId") @db.UniqueIdentifier
+  /// MERCADO_PAGO
+  provider          String    @map("Provider") @db.VarChar(20)
+  /// Id da cobrança no provedor (authorized_payment do Mercado Pago)
+  providerPaymentId String    @unique(map: "UQ_Payments_ProviderPaymentId") @map("ProviderPaymentId") @db.VarChar(100)
+  /// Id da assinatura no provedor
+  providerRef       String?   @map("ProviderRef") @db.VarChar(100)
+  amount            Decimal   @map("Amount") @db.Decimal(19, 2)
+  /// PENDING | APPROVED | REJECTED | REFUNDED
+  status            String    @map("Status") @db.VarChar(20)
+  description       String    @map("Description") @db.NVarChar(200)
+  payerEmail        String?   @map("PayerEmail") @db.NVarChar(254)
+  paidAt            DateTime? @map("PaidAt") @db.DateTime2
+  createdAt         DateTime  @default(now()) @map("CreatedAt") @db.DateTime2
+  updatedAt         DateTime  @updatedAt @map("UpdatedAt") @db.DateTime2
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull, onUpdate: NoAction, map: "FK_Payments_Users")
+
+  @@index([userId], map: "IX_Payments_UserId")
+  @@index([createdAt], map: "IX_Payments_CreatedAt")
+  @@map("Payments")
+}
+
+/// Aviso recebido do provedor. Guardado para auditoria e para não processar duas vezes.
+model WebhookEvent {
+  id          String    @id @default(uuid()) @map("Id") @db.UniqueIdentifier
+  provider    String    @map("Provider") @db.VarChar(20)
+  /// x-request-id do Mercado Pago: identifica a entrega
+  requestId   String?   @unique(map: "UQ_WebhookEvents_RequestId") @map("RequestId") @db.VarChar(100)
+  type        String    @map("Type") @db.VarChar(60)
+  resourceId  String?   @map("ResourceId") @db.VarChar(100)
+  /// RECEIVED | PROCESSED | IGNORED | FAILED | REJECTED
+  status      String    @map("Status") @db.VarChar(20)
+  error       String?   @map("Error") @db.NVarChar(1000)
+  processedAt DateTime? @map("ProcessedAt") @db.DateTime2
+  createdAt   DateTime  @default(now()) @map("CreatedAt") @db.DateTime2
+
+  @@index([createdAt], map: "IX_WebhookEvents_CreatedAt")
+  @@map("WebhookEvents")
 }
 
 /// Registro do que o super administrador fez (trocar plano, suspender, editar plano).

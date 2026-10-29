@@ -12,6 +12,7 @@ import {
 } from '@financeiro/shared';
 import { toDbDate } from '../common/db-date';
 import type { Prisma } from '../generated/prisma/client';
+import { AppConfig } from '../config/app-config';
 import { PrismaService } from '../prisma/prisma.service';
 
 export const PLAN_SELECT = {
@@ -32,6 +33,7 @@ export const PLAN_SELECT = {
   maxBudgets: true,
   projectionDays: true,
   whatsapp: true,
+  trialDays: true,
 } as const satisfies Prisma.PlanSelect;
 
 export type PlanRow = Prisma.PlanGetPayload<{ select: typeof PLAN_SELECT }>;
@@ -65,6 +67,7 @@ export function toPlanDto(row: PlanRow): PlanDto {
     isActive: row.isActive,
     highlighted: row.highlighted,
     sortOrder: row.sortOrder,
+    trialDays: row.trialDays,
     features,
     limits: {
       maxAccounts: row.maxAccounts,
@@ -93,7 +96,10 @@ function grantsPlan(subscription: { status: string; currentPeriodEnd: Date | nul
 
 @Injectable()
 export class PlansService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly config: AppConfig,
+  ) {}
 
   /** Vitrine: planos públicos e ativos, na ordem definida pelo super admin. */
   async listPublic(): Promise<PlanDto[]> {
@@ -129,13 +135,14 @@ export class PlansService {
   }
 
   async myPlan(userId: string): Promise<MyPlanDto> {
-    const [plan, subscription, usage] = await Promise.all([
+    const [plan, subscription, usage, user] = await Promise.all([
       this.effectivePlan(userId),
       this.prisma.subscription.findUnique({
         where: { userId },
-        select: { status: true, currentPeriodEnd: true, provider: true },
+        select: { status: true, currentPeriodEnd: true, provider: true, trialEndsAt: true },
       }),
       this.usage(userId),
+      this.prisma.user.findUnique({ where: { id: userId }, select: { trialUsedAt: true } }),
     ]);
     return {
       plan: toPlanDto(plan),
@@ -146,9 +153,16 @@ export class PlansService {
               ? subscription.currentPeriodEnd.toISOString().slice(0, 10)
               : null,
             provider: subscription.provider,
+            trialEndsAt: subscription.trialEndsAt
+              ? subscription.trialEndsAt.toISOString().slice(0, 10)
+              : null,
           }
         : null,
       usage,
+      billing: {
+        enabled: Boolean(this.config.mercadoPago.accessToken),
+        trialAvailable: !user?.trialUsedAt,
+      },
     };
   }
 

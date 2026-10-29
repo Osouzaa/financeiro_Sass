@@ -12,6 +12,7 @@ import { ProjectionPage } from '@/features/projection/ProjectionPage';
 import { RecurrencesPage } from '@/features/recurrences/RecurrencesPage';
 import { AccountsPage } from '@/features/accounts/AccountsPage';
 import { AdminAuditPage } from '@/features/admin/AdminAuditPage';
+import { AdminBillingPage } from '@/features/admin/AdminBillingPage';
 import { AdminLayout } from '@/features/admin/AdminLayout';
 import { AdminOverviewPage } from '@/features/admin/AdminOverviewPage';
 import { AdminPlansPage } from '@/features/admin/AdminPlansPage';
@@ -76,6 +77,7 @@ const router = createBrowserRouter([
               { index: true, element: <AdminOverviewPage /> },
               { path: 'usuarios', element: <AdminUsersPage /> },
               { path: 'planos', element: <AdminPlansPage /> },
+              { path: 'pagamentos', element: <AdminBillingPage /> },
               { path: 'auditoria', element: <AdminAuditPage /> },
             ],
           },

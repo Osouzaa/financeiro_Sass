@@ -4,11 +4,10 @@ import {
   type PlanDto,
   type PlanInput,
   type PlanInputParsed,
-  type PlanLimits,
 } from '@financeiro/shared';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Check, EyeOff, Pencil, Plus, Star } from 'lucide-react';
-import { useState } from 'react';
+import { Check, Plus } from 'lucide-react';
+import { useState, type ReactNode } from 'react';
 import { Controller, useForm, useWatch } from 'react-hook-form';
 import { Button, FormAlert, TextField } from '@/components/form';
 import { CurrencyInput, Field, NumberInput, Select, Switch } from '@/components/inputs';
@@ -17,29 +16,30 @@ import { useToast } from '@/components/toast';
 import { applyServerErrors } from '@/features/auth/apply-server-errors';
 import { formatPlanPrice } from '@/features/plans/plan-api';
 import { api, ApiError } from '@/lib/api';
-import { useAdminPlans, useInvalidateAdmin } from './admin-api';
+import { useAdminMetrics, useAdminPlans, useInvalidateAdmin } from './admin-api';
 
 type Counted = 'maxAccounts' | 'maxCards' | 'maxRecurrences' | 'maxBudgets';
 
-const LIMITS: { key: Counted; label: string }[] = [
-  { key: 'maxAccounts', label: 'Contas e carteiras' },
-  { key: 'maxCards', label: 'Cartões de crédito' },
-  { key: 'maxRecurrences', label: 'Recorrências ativas' },
-  { key: 'maxBudgets', label: 'Limites de orçamento por mês' },
+const LIMITS: { key: Counted; label: string; short: string }[] = [
+  { key: 'maxAccounts', label: 'Contas e carteiras', short: 'contas' },
+  { key: 'maxCards', label: 'Cartões de crédito', short: 'cartões' },
+  { key: 'maxRecurrences', label: 'Recorrências ativas', short: 'recorrências' },
+  { key: 'maxBudgets', label: 'Categorias com orçamento', short: 'orçamentos' },
 ];
-
-const limitText = (value: number | null) => (value === null ? 'Ilimitado' : String(value));
 
 export function AdminPlansPage() {
   const { data: plans = [], isPending } = useAdminPlans();
+  const { data: metrics } = useAdminMetrics();
   const [editing, setEditing] = useState<PlanDto | 'new' | null>(null);
+  const subscribers = new Map(metrics?.byPlan.map((row) => [row.planId, row.users]) ?? []);
 
   return (
     <>
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <p className="max-w-[64ch] text-sm text-slate">
-          Preço, limites e o que aparece na vitrine. Mudanças valem na hora para quem já está no
-          plano. O Grátis é o plano de quem não tem assinatura: ele sempre existe e fica ativo.
+      <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
+        <p className="max-w-[62ch] text-[15px] leading-[1.6] text-steel">
+          Preço, teste grátis, limites e o que aparece na vitrine. Mudanças valem na hora para quem
+          já está no plano. O Grátis é o plano de quem não tem assinatura, por isso fica sempre
+          ativo.
         </p>
         <Button type="button" onClick={() => setEditing('new')}>
           <Plus size={18} aria-hidden="true" /> Novo plano
@@ -49,65 +49,60 @@ export function AdminPlansPage() {
       {isPending ? (
         <div className="card h-[260px] animate-pulse bg-sunken/40" aria-hidden="true" />
       ) : (
-        <ul className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
-          {plans.map((plan) => (
-            <li
-              key={plan.id}
-              className={`card flex flex-col p-5 ${plan.isActive ? '' : 'opacity-60'}`}
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="flex items-center gap-2 font-display text-lg font-semibold">
-                    {plan.name}
-                    {plan.highlighted ? (
-                      <Star size={15} className="fill-ember text-ember" aria-label="Destaque" />
-                    ) : null}
-                  </p>
-                  <p className="text-[12px] text-faint">{plan.code}</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setEditing(plan)}
-                  className="grid size-8 place-items-center rounded-[8px] text-slate hover:bg-sunken hover:text-graphite"
-                  aria-label={`Editar ${plan.name}`}
-                >
-                  <Pencil size={16} />
-                </button>
-              </div>
-              <p className="tabular mt-3 font-display text-2xl font-semibold">
-                {formatPlanPrice(plan)}
-              </p>
-              <div className="mt-2 flex flex-wrap gap-1.5 text-[12px]">
-                {!plan.isPublic ? (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-sunken px-2 py-0.5 text-steel">
-                    <EyeOff size={12} aria-hidden="true" /> Fora da vitrine
-                  </span>
-                ) : (
-                  <span className="rounded-full bg-positive-soft px-2 py-0.5 text-positive">
-                    Na vitrine
-                  </span>
-                )}
-                {!plan.isActive ? (
-                  <span className="rounded-full bg-negative-soft px-2 py-0.5 text-negative">
-                    Desativado
-                  </span>
-                ) : null}
-              </div>
-              <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-1.5 border-t border-line pt-3 text-[13px]">
-                {LIMITS.map(({ key, label }) => (
-                  <div key={key} className="contents">
-                    <dt className="text-slate">{label}</dt>
-                    <dd className="tabular text-right">{limitText(plan.limits[key])}</dd>
-                  </div>
-                ))}
-                <dt className="text-slate">Projeção</dt>
-                <dd className="tabular text-right">{plan.limits.projectionDays} dias</dd>
-                <dt className="text-slate">WhatsApp</dt>
-                <dd className="text-right">{plan.limits.whatsapp ? 'Sim' : 'Não'}</dd>
-              </dl>
-            </li>
-          ))}
-        </ul>
+        <div className="card overflow-x-auto">
+          <table className="w-full min-w-[860px] text-left text-[15px]">
+            <thead>
+              <tr className="border-b border-line text-[13px] text-slate">
+                <th className="px-5 py-3 font-medium">Plano</th>
+                <th className="px-5 py-3 font-medium">Preço</th>
+                <th className="px-5 py-3 font-medium">Teste</th>
+                <th className="px-5 py-3 font-medium">Limites</th>
+                <th className="px-5 py-3 font-medium">Situação</th>
+                <th className="px-5 py-3 text-right font-medium">Contas</th>
+                <th className="px-5 py-3">
+                  <span className="sr-only">Ações</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-line">
+              {plans.map((plan) => (
+                <tr key={plan.id} className={plan.isActive ? '' : 'text-slate'}>
+                  <td className="px-5 py-4">
+                    <p className="font-medium text-graphite">{plan.name}</p>
+                    <p className="text-[13px] text-slate">{plan.code}</p>
+                  </td>
+                  <td className="tabular px-5 py-4">{formatPlanPrice(plan)}</td>
+                  <td className="tabular px-5 py-4">
+                    {plan.trialDays ? `${plan.trialDays} dias` : '—'}
+                  </td>
+                  <td className="px-5 py-4 text-[13px] leading-[1.6] text-steel">
+                    {LIMITS.map(({ key, short }) => `${plan.limits[key] ?? '∞'} ${short}`).join(
+                      ', ',
+                    )}
+                    <br />
+                    Projeção de {plan.limits.projectionDays} dias
+                    {plan.limits.whatsapp ? ', WhatsApp' : ''}
+                  </td>
+                  <td className="px-5 py-4 text-[13px]">
+                    <p className={plan.isActive ? 'text-positive' : 'text-negative'}>
+                      {plan.isActive ? 'Ativo' : 'Desativado'}
+                    </p>
+                    <p className="text-slate">
+                      {plan.isPublic ? 'Na vitrine' : 'Fora da vitrine'}
+                      {plan.highlighted ? ', em destaque' : ''}
+                    </p>
+                  </td>
+                  <td className="tabular px-5 py-4 text-right">{subscribers.get(plan.id) ?? 0}</td>
+                  <td className="px-5 py-4 text-right">
+                    <Button type="button" variant="secondary" onClick={() => setEditing(plan)}>
+                      Editar
+                    </Button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
 
       {editing ? (
@@ -133,6 +128,7 @@ function toInput(plan: PlanDto | undefined, nextSort: number): PlanInput {
       isActive: true,
       highlighted: false,
       sortOrder: nextSort,
+      trialDays: 0,
       features: [],
       limits: {
         maxAccounts: null,
@@ -146,6 +142,16 @@ function toInput(plan: PlanDto | undefined, nextSort: number): PlanInput {
   }
   const { id: _id, ...rest } = plan;
   return rest;
+}
+
+function Block({ title, text, children }: { title: string; text?: string; children: ReactNode }) {
+  return (
+    <section className="border-t border-line pt-5 first:border-t-0 first:pt-0">
+      <h3 className="font-semibold">{title}</h3>
+      {text ? <p className="mt-1 text-sm text-slate">{text}</p> : null}
+      <div className="mt-4">{children}</div>
+    </section>
+  );
 }
 
 function PlanFormModal({
@@ -174,7 +180,7 @@ function PlanFormModal({
     resolver: zodResolver(planInputSchema),
     defaultValues: initial,
   });
-  const limits = useWatch({ control, name: 'limits' }) as PlanLimits;
+  const watched = useWatch({ control }) as PlanInput;
 
   const onSubmit = handleSubmit(async (values) => {
     setFormError(undefined);
@@ -184,7 +190,7 @@ function PlanFormModal({
         body: values,
       });
       await invalidate();
-      notify(plan ? `Plano ${values.name} atualizado` : `Plano ${values.name} criado`);
+      notify(plan ? `Plano ${values.name} salvo` : `Plano ${values.name} criado`);
       onClose();
     } catch (error) {
       const message = applyServerErrors(error, setError);
@@ -198,6 +204,7 @@ function PlanFormModal({
     <Modal
       open
       onClose={onClose}
+      size="lg"
       title={plan ? `Editar ${plan.name}` : 'Novo plano'}
       footer={
         <>
@@ -205,7 +212,7 @@ function PlanFormModal({
             Cancelar
           </Button>
           <Button type="submit" form="plan-form" loading={isSubmitting}>
-            Salvar
+            {plan ? 'Salvar plano' : 'Criar plano'}
           </Button>
         </>
       }
@@ -213,7 +220,7 @@ function PlanFormModal({
       <form
         id="plan-form"
         onSubmit={(event) => {
-          // Uma linha por destaque na vitrine
+          // Um destaque por linha
           setValue(
             'features',
             featuresText
@@ -224,59 +231,84 @@ function PlanFormModal({
           void onSubmit(event);
         }}
         noValidate
-        className="flex flex-col gap-5"
+        className="grid gap-8 md:grid-cols-[minmax(0,1fr)_220px]"
       >
-        <FormAlert message={formError} />
-        <div className="grid gap-4 sm:grid-cols-2">
-          <TextField
-            label="Nome"
-            maxLength={40}
-            error={errors.name?.message}
-            {...register('name')}
-          />
-          <TextField
-            label="Código"
-            maxLength={30}
-            disabled={isFree}
-            hint={isFree ? 'O código do Grátis não muda.' : 'Ex.: pro, pro-anual'}
-            error={errors.code?.message}
-            {...register('code')}
-          />
-        </div>
-        <TextField
-          label="Descrição"
-          maxLength={200}
-          error={errors.description?.message}
-          {...register('description')}
-        />
-        <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_140px]">
-          <Controller
-            control={control}
-            name="priceCents"
-            render={({ field }) => (
-              <Field label="Preço" error={errors.priceCents?.message}>
-                <CurrencyInput value={field.value} onChange={field.onChange} aria-label="Preço" />
-              </Field>
-            )}
-          />
-          <Field label="Cobrança">
-            <Select {...register('interval')}>
-              <option value="MONTH">Mensal</option>
-              <option value="YEAR">Anual</option>
-            </Select>
-          </Field>
-        </div>
+        <div className="flex flex-col gap-6">
+          <FormAlert message={formError} />
 
-        <fieldset className="rounded-[14px] border border-line bg-canvas p-4">
-          <legend className="px-1 text-sm font-medium">Limites</legend>
-          <div className="grid gap-3 sm:grid-cols-2">
-            {LIMITS.map(({ key, label }) => {
-              const unlimited = limits?.[key] === null;
-              return (
-                <div key={key} className="rounded-[10px] bg-surface p-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-sm">{label}</span>
-                    <label className="flex items-center gap-1.5 text-[12px] text-slate">
+          <Block title="Identificação">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <TextField
+                label="Nome"
+                maxLength={40}
+                error={errors.name?.message}
+                {...register('name')}
+              />
+              <TextField
+                label="Código"
+                maxLength={30}
+                disabled={isFree}
+                hint={
+                  isFree ? 'O código do Grátis não muda.' : 'Minúsculas e hífen, ex.: pro-anual'
+                }
+                error={errors.code?.message}
+                {...register('code')}
+              />
+            </div>
+            <div className="mt-4">
+              <TextField
+                label="Descrição curta"
+                maxLength={200}
+                error={errors.description?.message}
+                {...register('description')}
+              />
+            </div>
+          </Block>
+
+          <Block title="Preço e teste grátis">
+            <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_140px_150px]">
+              <Controller
+                control={control}
+                name="priceCents"
+                render={({ field }) => (
+                  <Field label="Preço" error={errors.priceCents?.message}>
+                    <CurrencyInput
+                      value={field.value}
+                      onChange={field.onChange}
+                      aria-label="Preço"
+                    />
+                  </Field>
+                )}
+              />
+              <Field label="Cobrança">
+                <Select {...register('interval')}>
+                  <option value="MONTH">Mensal</option>
+                  <option value="YEAR">Anual</option>
+                </Select>
+              </Field>
+              <Field
+                label="Dias grátis"
+                error={errors.trialDays?.message}
+                hint="Uma vez por pessoa"
+              >
+                <NumberInput
+                  min={0}
+                  max={90}
+                  error={errors.trialDays?.message}
+                  {...register('trialDays', { valueAsNumber: true })}
+                />
+              </Field>
+            </div>
+          </Block>
+
+          <Block title="Limites" text="Deixe ilimitado o que o plano não deve restringir.">
+            <div className="divide-y divide-line rounded-[12px] border border-line">
+              {LIMITS.map(({ key, label }) => {
+                const unlimited = watched.limits?.[key] === null;
+                return (
+                  <div key={key} className="flex flex-wrap items-center gap-3 px-4 py-3">
+                    <span className="min-w-0 flex-1 text-[15px]">{label}</span>
+                    <label className="flex items-center gap-2 text-sm text-steel">
                       <input
                         type="checkbox"
                         checked={unlimited}
@@ -285,103 +317,180 @@ function PlanFormModal({
                             shouldDirty: true,
                           })
                         }
-                        className="accent-[var(--color-ember)]"
+                        className="size-4 accent-[var(--color-ember)]"
                       />
                       Ilimitado
                     </label>
+                    {!unlimited ? (
+                      <NumberInput
+                        min={0}
+                        aria-label={label}
+                        className="!h-10 !w-24"
+                        error={errors.limits?.[key]?.message}
+                        {...register(`limits.${key}`, { valueAsNumber: true })}
+                      />
+                    ) : null}
                   </div>
-                  {!unlimited ? (
-                    <NumberInput
-                      min={0}
-                      className="mt-2 !h-10"
-                      error={errors.limits?.[key]?.message}
-                      {...register(`limits.${key}`, { valueAsNumber: true })}
-                    />
-                  ) : null}
-                </div>
-              );
-            })}
-            <div className="rounded-[10px] bg-surface p-3">
-              <span className="text-sm">Dias de projeção</span>
-              <NumberInput
-                min={7}
-                max={365}
-                className="mt-2 !h-10"
-                error={errors.limits?.projectionDays?.message}
-                {...register('limits.projectionDays', { valueAsNumber: true })}
-              />
-            </div>
-            <div className="rounded-[10px] bg-surface p-3">
-              <Controller
-                control={control}
-                name="limits.whatsapp"
-                render={({ field }) => (
-                  <Switch
-                    checked={field.value}
-                    onChange={field.onChange}
-                    label="Assistente no WhatsApp"
-                  />
-                )}
-              />
-            </div>
-          </div>
-        </fieldset>
-
-        <Field
-          label="Destaques na vitrine (um por linha)"
-          error={errors.features?.message}
-          htmlFor="plan-features"
-        >
-          <textarea
-            id="plan-features"
-            rows={4}
-            value={featuresText}
-            onChange={(event) => setFeaturesText(event.target.value)}
-            className="w-full rounded-[10px] border border-line-strong bg-surface px-4 py-3 text-[15px] hover:border-faint focus:border-ember focus:ring-4 focus:ring-ember-soft focus:outline-none"
-          />
-        </Field>
-
-        <div className="grid gap-4 sm:grid-cols-2">
-          {(['isPublic', 'isActive', 'highlighted'] as const).map((name) => (
-            <Controller
-              key={name}
-              control={control}
-              name={name}
-              render={({ field }) => (
-                <Switch
-                  checked={field.value}
-                  onChange={field.onChange}
-                  label={
-                    { isPublic: 'Na vitrine', isActive: 'Ativo', highlighted: 'Destaque' }[name]
-                  }
-                  description={
-                    {
-                      isPublic: 'Aparece na página de planos.',
-                      isActive: isFree
-                        ? 'O Grátis fica sempre ativo.'
-                        : 'Pode receber novas assinaturas.',
-                      highlighted: 'Marcado como "mais escolhido".',
-                    }[name]
-                  }
-                  disabled={name === 'isActive' && isFree}
+                );
+              })}
+              <div className="flex flex-wrap items-center gap-3 px-4 py-3">
+                <span className="min-w-0 flex-1 text-[15px]">Dias de projeção de saldo</span>
+                <NumberInput
+                  min={7}
+                  max={365}
+                  aria-label="Dias de projeção"
+                  className="!h-10 !w-24"
+                  error={errors.limits?.projectionDays?.message}
+                  {...register('limits.projectionDays', { valueAsNumber: true })}
                 />
-              )}
-            />
-          ))}
-          <TextField
-            label="Ordem na vitrine"
-            type="number"
-            min={0}
-            error={errors.sortOrder?.message}
-            {...register('sortOrder', { valueAsNumber: true })}
-          />
+              </div>
+              <div className="px-4 py-3">
+                <Controller
+                  control={control}
+                  name="limits.whatsapp"
+                  render={({ field }) => (
+                    <Switch
+                      checked={field.value}
+                      onChange={field.onChange}
+                      label="Assistente no WhatsApp"
+                    />
+                  )}
+                />
+              </div>
+            </div>
+            {errors.limits ? (
+              <p className="mt-2 text-[13px] text-negative">Confira os limites.</p>
+            ) : null}
+          </Block>
+
+          <Block
+            title="Vitrine"
+            text="Como o plano aparece na página de divulgação e em Configurações → Plano."
+          >
+            <div className="flex flex-col gap-4">
+              {(['isPublic', 'highlighted', 'isActive'] as const).map((name) => (
+                <Controller
+                  key={name}
+                  control={control}
+                  name={name}
+                  render={({ field }) => (
+                    <Switch
+                      checked={field.value}
+                      onChange={field.onChange}
+                      disabled={name === 'isActive' && isFree}
+                      label={
+                        {
+                          isPublic: 'Mostrar na vitrine',
+                          highlighted: 'Destacar',
+                          isActive: 'Ativo',
+                        }[name]
+                      }
+                      description={
+                        {
+                          isPublic: 'Aparece para visitantes e para quem vai trocar de plano.',
+                          highlighted: 'Ganha a moldura escura na comparação.',
+                          isActive: isFree
+                            ? 'O Grátis fica sempre ativo.'
+                            : 'Desativado, não recebe novas assinaturas; quem já assina continua.',
+                        }[name]
+                      }
+                    />
+                  )}
+                />
+              ))}
+              <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_120px]">
+                <Field
+                  label="Destaques da vitrine (um por linha)"
+                  error={errors.features?.message}
+                  htmlFor="plan-features"
+                >
+                  <textarea
+                    id="plan-features"
+                    rows={5}
+                    value={featuresText}
+                    onChange={(event) => setFeaturesText(event.target.value)}
+                    className="w-full rounded-[10px] border border-line-strong bg-surface px-4 py-3 text-[15px] leading-[1.5] hover:border-faint focus:border-ember focus:ring-4 focus:ring-ember-soft focus:outline-none"
+                  />
+                </Field>
+                <TextField
+                  label="Ordem"
+                  type="number"
+                  min={0}
+                  hint="Menor aparece antes"
+                  error={errors.sortOrder?.message}
+                  {...register('sortOrder', { valueAsNumber: true })}
+                />
+              </div>
+            </div>
+          </Block>
         </div>
-        {errors.limits ? (
-          <p className="flex items-center gap-1.5 text-[13px] text-negative">
-            <Check size={14} aria-hidden="true" /> Confira os limites.
-          </p>
-        ) : null}
+
+        {/* Prévia ao vivo, como aparece para o cliente */}
+        <aside className="hidden md:block" aria-label="Prévia na vitrine">
+          <div className="sticky top-0">
+            <p className="mb-2 text-sm text-slate">Prévia</p>
+            <PlanPreview input={watched} features={featuresText} />
+          </div>
+        </aside>
       </form>
     </Modal>
+  );
+}
+
+function PlanPreview({ input, features }: { input: PlanInput; features: string }) {
+  const priceCents = Number.isFinite(input.priceCents) ? input.priceCents : 0;
+  const [price, period] = formatPlanPrice({
+    priceCents,
+    interval: input.interval ?? 'MONTH',
+  }).split('/');
+  const lines = features
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .slice(0, 6);
+  const featured = input.highlighted;
+  return (
+    <div
+      className={`rounded-[14px] border p-4 ${
+        featured ? 'border-graphite bg-graphite text-white' : 'border-line bg-surface'
+      }`}
+    >
+      <p className="font-display text-[17px] font-semibold">{input.name || 'Nome do plano'}</p>
+      <p className={`mt-1 text-[13px] leading-[1.5] ${featured ? 'text-white/70' : 'text-slate'}`}>
+        {input.description || 'Descrição curta'}
+      </p>
+      <p className="mt-3 flex items-baseline gap-1">
+        <span className="tabular font-display text-[24px] leading-none font-semibold">{price}</span>
+        {period ? (
+          <span className={`text-[13px] ${featured ? 'text-white/60' : 'text-slate'}`}>
+            por {period}
+          </span>
+        ) : null}
+      </p>
+      {priceCents > 0 && Number(input.trialDays) > 0 ? (
+        <p
+          className={`mt-1 text-[13px] font-medium ${featured ? 'text-white/85' : 'text-positive'}`}
+        >
+          {input.trialDays} dias grátis
+        </p>
+      ) : null}
+      <ul className="mt-3 space-y-1.5 text-[13px]">
+        {lines.map((line) => (
+          <li key={line} className="flex gap-1.5">
+            <Check
+              size={14}
+              className={`mt-0.5 shrink-0 ${featured ? 'text-ember' : 'text-positive'}`}
+              aria-hidden="true"
+            />
+            {line}
+          </li>
+        ))}
+      </ul>
+      {!input.isPublic ? (
+        <p className={`mt-3 text-[12px] ${featured ? 'text-white/60' : 'text-slate'}`}>
+          Fora da vitrine: só o admin vê.
+        </p>
+      ) : null}
+    </div>
   );
 }

@@ -1,4 +1,5 @@
 import { ForbiddenException } from '@nestjs/common';
+import type { AppConfig } from '../config/app-config';
 import type { PrismaService } from '../prisma/prisma.service';
 import { PlansService } from './plans.service';
 
@@ -20,6 +21,7 @@ const planRow = (overrides: Record<string, unknown> = {}) => ({
   maxBudgets: 3,
   projectionDays: 30,
   whatsapp: false,
+  trialDays: 0,
   ...overrides,
 });
 
@@ -28,7 +30,10 @@ function setup(subscription: unknown = null) {
     plan: { findUnique: jest.fn().mockResolvedValue(planRow()), findMany: jest.fn() },
     subscription: { findUnique: jest.fn().mockResolvedValue(subscription) },
   };
-  return new PlansService(prisma as unknown as PrismaService);
+  return new PlansService(
+    prisma as unknown as PrismaService,
+    { mercadoPago: { accessToken: undefined } } as unknown as AppConfig,
+  );
 }
 
 const pro = planRow({

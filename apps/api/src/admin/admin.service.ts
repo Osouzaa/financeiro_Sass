@@ -28,6 +28,7 @@ import {
   type PlanInputParsed,
 } from '@financeiro/shared';
 import { RefreshTokenService } from '../auth/refresh-token.service';
+import { BillingService } from '../billing/billing.service';
 import { toDbDate } from '../common/db-date';
 import { AppConfig } from '../config/app-config';
 import type { Prisma } from '../generated/prisma/client';
@@ -45,6 +46,7 @@ export class AdminService implements OnApplicationBootstrap {
     private readonly config: AppConfig,
     private readonly plans: PlansService,
     private readonly refreshTokens: RefreshTokenService,
+    private readonly billing: BillingService,
   ) {}
 
   /** Promove os e-mails de SUPER_ADMIN_EMAILS. Só promove: tirar alguém é decisão manual. */
@@ -91,6 +93,7 @@ export class AdminService implements OnApplicationBootstrap {
             select: {
               status: true,
               currentPeriodEnd: true,
+              provider: true,
               plan: { select: { id: true, code: true, name: true } },
             },
           },
@@ -115,6 +118,7 @@ export class AdminService implements OnApplicationBootstrap {
         plan: row.subscription?.plan ?? { id: free.id, code: free.code, name: free.name },
         subscriptionStatus:
           (row.subscription?.status as AdminUserDto['subscriptionStatus']) ?? null,
+        subscriptionProvider: row.subscription?.provider ?? null,
         currentPeriodEnd: row.subscription?.currentPeriodEnd
           ? row.subscription.currentPeriodEnd.toISOString().slice(0, 10)
           : null,
@@ -192,6 +196,17 @@ export class AdminService implements OnApplicationBootstrap {
       userId,
       { email: user.email },
     );
+  }
+
+  /** Cancela a cobrança recorrente de uma conta no Mercado Pago (o plano vale até o fim do período). */
+  async cancelBilling(actorId: string, userId: string): Promise<void> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { email: true },
+    });
+    if (!user) throw new NotFoundException('Usuário não encontrado');
+    await this.billing.cancel(userId);
+    await this.audit(actorId, 'BILLING_CANCELED', 'USER', userId, { email: user.email });
   }
 
   async listPlans(): Promise<PlanDto[]> {
@@ -349,6 +364,7 @@ export class AdminService implements OnApplicationBootstrap {
       isActive: input.isActive,
       highlighted: input.highlighted,
       sortOrder: input.sortOrder,
+      trialDays: input.trialDays,
       features: JSON.stringify(input.features),
       maxAccounts: input.limits.maxAccounts,
       maxCards: input.limits.maxCards,

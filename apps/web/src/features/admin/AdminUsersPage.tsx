@@ -34,6 +34,7 @@ export function AdminUsersPage() {
   const { data, isPending, isFetching, error } = useAdminUsers(q, page);
   const [editing, setEditing] = useState<AdminUserDto | null>(null);
   const [toggling, setToggling] = useState<AdminUserDto | null>(null);
+  const [cancelingBilling, setCancelingBilling] = useState<AdminUserDto | null>(null);
   const { user: me } = useAuth();
   const pages = data ? Math.max(1, Math.ceil(data.total / data.pageSize)) : 1;
 
@@ -127,6 +128,11 @@ export function AdminUsersPage() {
                       {row.subscriptionStatus
                         ? subscriptionStatusLabels[row.subscriptionStatus]
                         : 'Sem assinatura'}
+                      {row.subscriptionProvider === 'MERCADO_PAGO'
+                        ? ' pelo Mercado Pago'
+                        : row.subscriptionProvider === 'MANUAL'
+                          ? ' (manual)'
+                          : ''}
                       {row.currentPeriodEnd
                         ? ` · até ${formatShortDate(row.currentPeriodEnd)}`
                         : ''}
@@ -143,6 +149,17 @@ export function AdminUsersPage() {
                       <Button type="button" variant="ghost" onClick={() => setEditing(row)}>
                         Plano
                       </Button>
+                      {row.subscriptionProvider === 'MERCADO_PAGO' &&
+                      row.subscriptionStatus &&
+                      row.subscriptionStatus !== 'CANCELED' ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          onClick={() => setCancelingBilling(row)}
+                        >
+                          Cancelar cobrança
+                        </Button>
+                      ) : null}
                       {row.id !== me?.id ? (
                         <Button
                           type="button"
@@ -197,6 +214,9 @@ export function AdminUsersPage() {
 
       {editing ? <SubscriptionModal user={editing} onClose={() => setEditing(null)} /> : null}
       {toggling ? <StatusModal user={toggling} onClose={() => setToggling(null)} /> : null}
+      {cancelingBilling ? (
+        <CancelBillingModal user={cancelingBilling} onClose={() => setCancelingBilling(null)} />
+      ) : null}
     </>
   );
 }
@@ -328,6 +348,53 @@ function StatusModal({ user, onClose }: { user: AdminUserDto; onClose: () => voi
         {suspended
           ? 'A pessoa volta a conseguir entrar. Os dados continuam como estavam.'
           : 'Todas as sessões são encerradas na hora e a pessoa não consegue entrar até ser reativada. Nenhum dado é apagado.'}
+      </p>
+    </Modal>
+  );
+}
+
+function CancelBillingModal({ user, onClose }: { user: AdminUserDto; onClose: () => void }) {
+  const invalidate = useInvalidateAdmin();
+  const notify = useToast();
+  const cancel = useMutation({
+    mutationFn: () => api(`/admin/users/${user.id}/billing/cancel`, { method: 'POST' }),
+    onSuccess: () => {
+      void invalidate();
+      notify(`Cobrança de ${user.name} cancelada no Mercado Pago`);
+      onClose();
+    },
+  });
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      size="sm"
+      title={`Cancelar a cobrança de ${user.name}?`}
+      description={user.email}
+      footer={
+        <>
+          <Button type="button" variant="ghost" onClick={onClose}>
+            Voltar
+          </Button>
+          <Button
+            type="button"
+            loading={cancel.isPending}
+            onClick={() => cancel.mutate()}
+            className="!bg-negative hover:!bg-[#a92e26]"
+          >
+            Cancelar cobrança
+          </Button>
+        </>
+      }
+    >
+      <FormAlert message={cancel.error?.message} />
+      <p className="text-[15px] text-steel">
+        A assinatura é cancelada no Mercado Pago e não haverá novas cobranças. A pessoa continua no{' '}
+        {user.plan.name}
+        {user.currentPeriodEnd
+          ? ` até ${formatShortDate(user.currentPeriodEnd)}`
+          : ' até o fim do período pago'}
+        . Fica registrado na auditoria.
       </p>
     </Modal>
   );

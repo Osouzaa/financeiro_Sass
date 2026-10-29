@@ -70,6 +70,12 @@ export const planInputSchema = z.object({
   isActive: z.boolean(),
   highlighted: z.boolean(),
   sortOrder: z.int().min(0).max(1000),
+  /** Dias grátis na primeira assinatura (a cobrança começa no dia seguinte). */
+  trialDays: z
+    .int({ error: 'Use um número inteiro' })
+    .min(0, { error: 'Não pode ser negativo' })
+    .max(90, { error: 'Máximo de 90 dias' })
+    .default(0),
   features: z
     .array(z.string().trim().min(1).max(80, { error: 'Item muito longo' }))
     .max(10, { error: 'No máximo 10 itens' }),
@@ -106,3 +112,41 @@ export const adminUsersQuerySchema = z.object({
   page: z.coerce.number().int().min(1).max(10_000).default(1),
 });
 export type AdminUsersQuery = z.output<typeof adminUsersQuerySchema>;
+
+export const PaymentStatus = {
+  PENDING: 'PENDING',
+  APPROVED: 'APPROVED',
+  REJECTED: 'REJECTED',
+  REFUNDED: 'REFUNDED',
+} as const;
+export type PaymentStatus = (typeof PaymentStatus)[keyof typeof PaymentStatus];
+
+export const paymentStatusLabels: Record<PaymentStatus, string> = {
+  PENDING: 'Em processamento',
+  APPROVED: 'Aprovado',
+  REJECTED: 'Recusado',
+  REFUNDED: 'Estornado',
+};
+
+/** Assinar um plano pago: o Mercado Pago recebe o cartão na página dele. */
+export const checkoutSchema = z.object({ planId: z.guid({ error: 'Escolha o plano' }) });
+export type CheckoutInput = z.infer<typeof checkoutSchema>;
+
+export const adminPaymentsQuerySchema = z.object({
+  q: z
+    .string()
+    .trim()
+    .max(100)
+    .optional()
+    .transform((value) => value || undefined),
+  status: z
+    .enum([
+      PaymentStatus.PENDING,
+      PaymentStatus.APPROVED,
+      PaymentStatus.REJECTED,
+      PaymentStatus.REFUNDED,
+    ])
+    .optional(),
+  page: z.coerce.number().int().min(1).max(10_000).default(1),
+});
+export type AdminPaymentsQuery = z.output<typeof adminPaymentsQuerySchema>;

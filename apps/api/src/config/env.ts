@@ -30,6 +30,23 @@ export const envSchema = z
     MAIL_FROM: z.string().default('Financeiro <nao-responda@localhost>'),
     /** Limite de tentativas por IP em login, cadastro e recuperação de senha. */
     RATE_LIMIT_ENABLED: z.stringbool().default(true),
+    /** Mercado Pago: sem o token, a cobrança fica desligada. Use as credenciais de teste no começo. */
+    MP_ACCESS_TOKEN: z.string().optional(),
+    /** Chave secreta dos webhooks (painel do Mercado Pago > Webhooks). */
+    MP_WEBHOOK_SECRET: z.string().optional(),
+    MP_API_BASE: z.url().default('https://api.mercadopago.com'),
+    /**
+     * Só com credencial de teste: e-mail do comprador de teste do Mercado Pago, usado
+     * no lugar do e-mail da conta (o sandbox recusa e-mails que não são de teste).
+     */
+    MP_TEST_PAYER_EMAIL: z.email().optional(),
+    /**
+     * true com o token de um vendedor de teste (começa com APP_USR-, como os de produção).
+     * Tokens TEST- já são tratados como teste.
+     */
+    MP_TEST_MODE: z.stringbool().default(false),
+    /** Endereço público desta API, para mostrar a URL do webhook no painel. */
+    API_PUBLIC_URL: z.url().optional(),
     /** E-mails promovidos a super administrador ao subir a API ou ao se cadastrar. */
     SUPER_ADMIN_EMAILS: z.string().default(''),
     /** true atrás de proxy reverso (nginx, load balancer), para ler o IP real do cliente. */
@@ -39,6 +56,14 @@ export const envSchema = z
     error: 'Defina um JWT_ACCESS_SECRET próprio em produção',
     path: ['JWT_ACCESS_SECRET'],
   })
+  .refine(
+    (env) =>
+      env.NODE_ENV !== 'production' || !env.MP_ACCESS_TOKEN || Boolean(env.MP_WEBHOOK_SECRET),
+    {
+      error: 'Com MP_ACCESS_TOKEN em produção, defina também MP_WEBHOOK_SECRET',
+      path: ['MP_WEBHOOK_SECRET'],
+    },
+  )
   .refine((env) => env.NODE_ENV !== 'production' || Boolean(env.SMTP_HOST), {
     error: 'Configure SMTP_HOST em produção: sem ele, ninguém recupera a senha',
     path: ['SMTP_HOST'],

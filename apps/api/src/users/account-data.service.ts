@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { toCents } from '@financeiro/shared';
 import { verifyPassword } from '../auth/password';
+import { BillingService } from '../billing/billing.service';
 import { fromDbDate } from '../common/db-date';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -13,7 +14,10 @@ const day = (value: Date | null) => (value ? fromDbDate(value) : null);
  */
 @Injectable()
 export class AccountDataService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly billing: BillingService,
+  ) {}
 
   /** Tudo o que o sistema guarda da pessoa, em JSON legível. */
   async export(userId: string) {
@@ -124,6 +128,9 @@ export class AccountDataService {
         fields: { password: ['Senha incorreta'] },
       });
     }
+
+    // Sem cobrança fantasma: a assinatura no Mercado Pago é cancelada antes de apagar a conta
+    await this.billing.cancelQuietly(userId);
 
     await this.prisma.$transaction(
       async (tx) => {

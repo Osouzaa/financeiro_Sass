@@ -12,11 +12,15 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiBody, ApiOperation, ApiTags } from '@nestjs/swagger';
 import {
+  adminPaymentsQuerySchema,
   adminSubscriptionSchema,
   adminUsersQuerySchema,
   planInputSchema,
   UserStatus,
+  type AdminBillingDto,
   type AdminMetricsDto,
+  type AdminPaymentDto,
+  type AdminPaymentsQuery,
   type AdminSubscriptionInputParsed,
   type AdminUserDto,
   type AdminUsersQuery,
@@ -27,6 +31,7 @@ import {
 } from '@financeiro/shared';
 import { CurrentUser, type AuthUser } from '../common/decorators/current-user.decorator';
 import { openApiSchema, ZodValidationPipe } from '../common/zod/zod-validation.pipe';
+import { BillingService } from '../billing/billing.service';
 import { AdminService } from './admin.service';
 import { SuperAdminGuard } from './super-admin.guard';
 
@@ -35,7 +40,10 @@ import { SuperAdminGuard } from './super-admin.guard';
 @UseGuards(SuperAdminGuard)
 @Controller('admin')
 export class AdminController {
-  constructor(private readonly admin: AdminService) {}
+  constructor(
+    private readonly admin: AdminService,
+    private readonly billing: BillingService,
+  ) {}
 
   @Get('metrics')
   @ApiOperation({ summary: 'Usuários, distribuição por plano e receita mensal estimada' })
@@ -78,6 +86,32 @@ export class AdminController {
     @Param('id', ParseUUIDPipe) id: string,
   ): Promise<void> {
     return this.admin.setStatus(actor.id, id, UserStatus.ACTIVE);
+  }
+
+  @Post('users/:id/billing/cancel')
+  @HttpCode(204)
+  @ApiOperation({ summary: 'Cancela a cobrança recorrente da conta no Mercado Pago' })
+  cancelBilling(
+    @CurrentUser() actor: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<void> {
+    return this.admin.cancelBilling(actor.id, id);
+  }
+
+  @Get('billing')
+  @ApiOperation({
+    summary: 'Situação da integração, receita do mês e últimos avisos do Mercado Pago',
+  })
+  billingSummary(): Promise<AdminBillingDto> {
+    return this.billing.adminSummary();
+  }
+
+  @Get('payments')
+  @ApiOperation({ summary: 'Cobranças, com busca por e-mail, nome ou id do Mercado Pago' })
+  payments(
+    @Query(new ZodValidationPipe(adminPaymentsQuerySchema)) query: AdminPaymentsQuery,
+  ): Promise<PageDto<AdminPaymentDto>> {
+    return this.billing.adminPayments(query);
   }
 
   @Get('plans')

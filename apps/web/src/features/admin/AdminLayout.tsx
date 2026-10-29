@@ -1,4 +1,4 @@
-import { Gauge, Layers, ScrollText, Users, type LucideIcon } from 'lucide-react';
+import { CreditCard, Gauge, Layers, ScrollText, Users, type LucideIcon } from 'lucide-react';
 import { Navigate, NavLink, Outlet } from 'react-router';
 import { useAuth } from '@/features/auth/auth-context';
 import { PageHeader } from '@/layout/AppLayout';
@@ -7,6 +7,7 @@ const TABS: { to: string; label: string; icon: LucideIcon; end?: boolean }[] = [
   { to: '/admin', label: 'Visão geral', icon: Gauge, end: true },
   { to: '/admin/usuarios', label: 'Usuários', icon: Users },
   { to: '/admin/planos', label: 'Planos', icon: Layers },
+  { to: '/admin/pagamentos', label: 'Pagamentos', icon: CreditCard },
   { to: '/admin/auditoria', label: 'Auditoria', icon: ScrollText },
 ];
 
@@ -22,7 +23,7 @@ export function AdminLayout() {
     <>
       <PageHeader
         title="Administração"
-        description="Contas, planos e o registro de tudo o que foi alterado por aqui."
+        description="Contas, planos, pagamentos e o registro de tudo o que foi alterado por aqui."
       />
       <nav
         aria-label="Seções da administração"

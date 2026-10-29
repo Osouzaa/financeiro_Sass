@@ -451,10 +451,15 @@ function Security() {
 
 /* ------------------------------------------------------------------ Planos */
 
-type Row = { label: string; value: (limits: PlanLimits) => string | boolean };
+type Row = { label: string; value: (limits: PlanLimits, plan: PlanDto) => string | boolean };
 
 const ROWS: Row[] = [
   { label: 'Lançamentos', value: () => 'Ilimitados' },
+  {
+    label: 'Teste grátis',
+    value: (_limits, plan) =>
+      plan.priceCents === 0 ? '—' : plan.trialDays ? `${plan.trialDays} dias` : false,
+  },
   {
     label: 'Contas e carteiras',
     value: (l) => (l.maxAccounts === null ? 'Ilimitadas' : String(l.maxAccounts)),
@@ -518,7 +523,7 @@ function Pricing() {
           </>
         )}
         <p className="mt-6 text-sm text-slate">
-          Pagamento por Pix ou cartão, processado pelo Mercado Pago.
+          Planos pagos no cartão de crédito, pelo Mercado Pago, com renovação automática.
         </p>
       </div>
     </section>
@@ -550,6 +555,11 @@ function PriceCard({ plan }: { plan: PlanDto }) {
           <span className={featured ? 'text-white/60' : 'text-slate'}>por {period}</span>
         ) : null}
       </p>
+      {!free && plan.trialDays > 0 ? (
+        <p className={`mt-2 text-[15px] ${featured ? 'text-white/80' : 'text-positive'}`}>
+          {plan.trialDays} dias grátis para experimentar
+        </p>
+      ) : null}
       <ul className="mt-8 flex-1 space-y-3 text-[15px]">
         {plan.features.map((feature) => (
           <li key={feature} className="flex gap-3">
@@ -571,7 +581,11 @@ function PriceCard({ plan }: { plan: PlanDto }) {
             : 'border border-line-strong hover:bg-sunken'
         }`}
       >
-        {free ? 'Começar grátis' : `Assinar o ${plan.name}`}
+        {free
+          ? 'Começar grátis'
+          : plan.trialDays > 0
+            ? `Experimentar ${plan.trialDays} dias grátis`
+            : `Assinar o ${plan.name}`}
       </Link>
     </li>
   );
@@ -602,7 +616,7 @@ function ComparisonTable({ plans }: { plans: PlanDto[] }) {
                 {row.label}
               </th>
               {plans.map((plan) => {
-                const value = row.value(plan.limits);
+                const value = row.value(plan.limits, plan);
                 return (
                   <td key={plan.id} className="tabular py-3.5 pr-6">
                     {value === true ? (

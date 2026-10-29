@@ -48,6 +48,24 @@ export class AppConfig {
     };
   }
 
+  get mercadoPago() {
+    const token = this.env.MP_ACCESS_TOKEN;
+    // Teste: token TEST- da conta real, ou token de um vendedor de teste com MP_TEST_MODE
+    const testMode = Boolean(token) && (token!.startsWith('TEST-') || this.env.MP_TEST_MODE);
+    return {
+      accessToken: token,
+      webhookSecret: this.env.MP_WEBHOOK_SECRET,
+      apiBase: this.env.MP_API_BASE.replace(/\/+$/, ''),
+      testMode,
+      // Ignorado em produção: lá, o e-mail é sempre o da conta
+      testPayerEmail: testMode ? this.env.MP_TEST_PAYER_EMAIL : undefined,
+    };
+  }
+
+  get apiPublicUrl(): string | null {
+    return this.env.API_PUBLIC_URL ? this.env.API_PUBLIC_URL.replace(/\/+$/, '') : null;
+  }
+
   get superAdminEmails(): string[] {
     return this.env.SUPER_ADMIN_EMAILS.split(',')
       .map((email) => email.trim().toLowerCase())
