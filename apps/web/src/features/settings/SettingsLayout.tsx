@@ -1,10 +1,11 @@
-import { Bell, Shapes, ShieldCheck, UserRound, type LucideIcon } from 'lucide-react';
+import { Bell, Crown, Shapes, ShieldCheck, UserRound, type LucideIcon } from 'lucide-react';
 import { NavLink, Outlet } from 'react-router';
 import { PageHeader } from '@/layout/AppLayout';
 
 const TABS: { to: string; label: string; icon: LucideIcon }[] = [
   { to: 'perfil', label: 'Perfil', icon: UserRound },
   { to: 'seguranca', label: 'Segurança', icon: ShieldCheck },
+  { to: 'plano', label: 'Plano', icon: Crown },
   { to: 'alertas', label: 'Alertas', icon: Bell },
   { to: 'categorias', label: 'Categorias', icon: Shapes },
 ];

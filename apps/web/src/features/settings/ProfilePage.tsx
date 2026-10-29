@@ -1,23 +1,35 @@
-import { updateProfileSchema, type UpdateProfileInput, type UserDto } from '@financeiro/shared';
+import {
+  updateProfileSchema,
+  type ProfileDto,
+  type UpdateProfileInput,
+  type UserDto,
+} from '@financeiro/shared';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Camera, Lock, Mail, Trash2, User } from 'lucide-react';
 import { useRef, useState } from 'react';
-import { useForm, useWatch } from 'react-hook-form';
+import { Controller, useForm, useWatch } from 'react-hook-form';
 import { Avatar } from '@/components/Avatar';
 import { Button, FormAlert, PasswordField, TextField } from '@/components/form';
 import { useToast } from '@/components/toast';
 import { applyServerErrors } from '@/features/auth/apply-server-errors';
+import { CpfField } from '@/features/auth/identity-fields';
+import { WhatsappSection } from './WhatsappSection';
 import { useAuth } from '@/features/auth/auth-context';
 import { api, ApiError } from '@/lib/api';
 import { squareThumbnail } from '@/lib/image';
 import { SettingsSection } from './SettingsLayout';
 
 export function ProfilePage() {
+  const { data: profile } = useQuery({
+    queryKey: ['profile'],
+    queryFn: () => api<ProfileDto>('/me'),
+  });
   return (
     <div className="space-y-4">
       <PhotoSection />
       <DetailsSection />
+      <WhatsappSection profile={profile} />
     </div>
   );
 }
@@ -98,6 +110,12 @@ function PhotoSection() {
 function DetailsSection() {
   const { user, updateUser } = useAuth();
   const notify = useToast();
+  const queryClient = useQueryClient();
+  const { data: profile } = useQuery({
+    queryKey: ['profile'],
+    queryFn: () => api<ProfileDto>('/me'),
+  });
+  const [editingCpf, setEditingCpf] = useState(false);
   const [formError, setFormError] = useState<string>();
   const {
     register,
@@ -105,24 +123,40 @@ function DetailsSection() {
     setError,
     control,
     reset,
+    setValue,
     formState: { errors, isSubmitting, isDirty },
   } = useForm<UpdateProfileInput>({
     resolver: zodResolver(updateProfileSchema),
-    defaultValues: { name: user?.name ?? '', email: user?.email ?? '', currentPassword: '' },
+    defaultValues: {
+      name: user?.name ?? '',
+      email: user?.email ?? '',
+      cpf: '',
+      currentPassword: '',
+    },
   });
 
-  const email = useWatch({ control, name: 'email' });
+  const [email, cpf] = useWatch({ control, name: ['email', 'cpf'] });
   const emailChanged = email.trim().toLowerCase() !== user?.email;
+  // O CPF entra e sai do formulário: vazio significa "não mexer"
+  const cpfChanged = Boolean(cpf);
+  const needsPassword = emailChanged || cpfChanged;
+  const showCpfInput = editingCpf || (profile !== undefined && profile.cpfMasked === null);
 
   const onSubmit = handleSubmit(async (values) => {
     setFormError(undefined);
     try {
       const next = await api<UserDto>('/me', {
         method: 'PATCH',
-        body: { ...values, currentPassword: emailChanged ? values.currentPassword : undefined },
+        body: {
+          ...values,
+          cpf: values.cpf || undefined,
+          currentPassword: needsPassword ? values.currentPassword : undefined,
+        },
       });
       updateUser(next);
-      reset({ name: next.name, email: next.email, currentPassword: '' });
+      reset({ name: next.name, email: next.email, cpf: '', currentPassword: '' });
+      setEditingCpf(false);
+      void queryClient.invalidateQueries({ queryKey: ['profile'] });
       notify('Perfil atualizado');
     } catch (error) {
       const message = applyServerErrors(error, setError);
@@ -135,7 +169,7 @@ function DetailsSection() {
   return (
     <SettingsSection
       title="Dados pessoais"
-      description="Seu nome aparece na saudação do painel. O e-mail é usado para entrar."
+      description="Seu nome aparece na saudação do painel. O e-mail e o CPF servem para entrar e para recuperar a senha."
     >
       <form onSubmit={onSubmit} noValidate className="flex flex-col gap-5">
         <FormAlert message={formError} />
@@ -156,11 +190,64 @@ function DetailsSection() {
           error={errors.email?.message}
           {...register('email')}
         />
-        {emailChanged ? (
+        {showCpfInput ? (
+          <Controller
+            control={control}
+            name="cpf"
+            render={({ field }) => (
+              <CpfField
+                ref={field.ref}
+                name={field.name}
+                value={field.value}
+                onChange={field.onChange}
+                onBlur={field.onBlur}
+                error={errors.cpf?.message}
+                hint={
+                  profile?.cpfMasked
+                    ? `Atual: ${profile.cpfMasked}`
+                    : 'Sua conta ainda não tem CPF. Com ele, você também entra pelo CPF.'
+                }
+                labelAside={
+                  editingCpf ? (
+                    <button
+                      type="button"
+                      className="text-[13px] text-slate hover:text-graphite"
+                      onClick={() => {
+                        setEditingCpf(false);
+                        setValue('cpf', '', { shouldDirty: true });
+                      }}
+                    >
+                      Cancelar
+                    </button>
+                  ) : undefined
+                }
+              />
+            )}
+          />
+        ) : profile?.cpfMasked ? (
+          <div className="flex items-center justify-between gap-3 rounded-[10px] border border-line bg-canvas px-4 py-3">
+            <div>
+              <p className="text-sm font-medium">CPF</p>
+              <p className="tabular text-[15px] text-steel">{profile.cpfMasked}</p>
+            </div>
+            <button
+              type="button"
+              className="link-ember text-sm"
+              onClick={() => setEditingCpf(true)}
+            >
+              Alterar
+            </button>
+          </div>
+        ) : null}
+        {needsPassword ? (
           <PasswordField
             label="Senha atual"
             icon={Lock}
-            placeholder="Confirme sua senha para trocar o e-mail"
+            placeholder={
+              emailChanged
+                ? 'Confirme sua senha para trocar o e-mail'
+                : 'Confirme sua senha para salvar o CPF'
+            }
             autoComplete="current-password"
             error={errors.currentPassword?.message}
             {...register('currentPassword')}

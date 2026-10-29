@@ -20,7 +20,8 @@ export function Modal({
   description?: string;
   children: ReactNode;
   footer?: ReactNode;
-  size?: 'sm' | 'md';
+  /** sm 440px, md 560px, lg 760px (formulários longos). */
+  size?: 'sm' | 'md' | 'lg';
 }) {
   const ref = useRef<HTMLDialogElement>(null);
 
@@ -34,8 +35,13 @@ export function Modal({
   return (
     <dialog
       ref={ref}
-      onClose={onClose}
+      // Só reage aos eventos do próprio <dialog>: num modal aberto dentro de outro,
+      // o React propaga close/cancel pela árvore e fecharia os dois
+      onClose={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
       onCancel={(event) => {
+        if (event.target !== event.currentTarget) return;
         event.preventDefault();
         onClose();
       }}
@@ -44,7 +50,7 @@ export function Modal({
         if (event.target === ref.current) onClose();
       }}
       className={`m-auto w-[min(94vw,var(--w))] rounded-[18px] border border-line bg-surface p-0 text-graphite shadow-[0_24px_80px_-24px_rgb(0_0_0/0.45)] backdrop:bg-black/45 backdrop:backdrop-blur-[2px]`}
-      style={{ ['--w' as string]: size === 'sm' ? '440px' : '560px' }}
+      style={{ ['--w' as string]: { sm: '440px', md: '560px', lg: '760px' }[size] }}
     >
       {open ? (
         <div className="flex max-h-[88dvh] flex-col">

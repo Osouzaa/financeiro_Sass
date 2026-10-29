@@ -1,21 +1,27 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import type {
-  ChangePasswordInput,
-  LoginInput,
-  RegisterInput,
-  SessionDto,
-  UserDto,
+import {
+  TERMS_VERSION,
+  UserRole,
+  UserStatus,
+  type ChangePasswordInput,
+  type LoginInput,
+  type RegisterInputParsed,
+  type SessionDto,
+  type UserDto,
 } from '@financeiro/shared';
 import { CategoriesService } from '../categories/categories.service';
 import { AppConfig } from '../config/app-config';
 import { PrismaService } from '../prisma/prisma.service';
+import { EmailVerificationService } from './email-verification.service';
+import { findUserByIdentifier } from './identifier';
 import { hashPassword, verifyPassword } from './password';
 import { hashToken, RefreshTokenService } from './refresh-token.service';
 import { toUserDto, USER_SELECT } from './user-dto';
@@ -41,43 +47,77 @@ export class AuthService {
     private readonly config: AppConfig,
     private readonly refreshTokens: RefreshTokenService,
     private readonly categories: CategoriesService,
+    private readonly emailVerification: EmailVerificationService,
   ) {}
 
-  async register(input: RegisterInput, userAgent?: string): Promise<Session> {
-    const existing = await this.prisma.user.findUnique({
-      where: { email: input.email },
-      select: { id: true },
-    });
-    if (existing) throw new ConflictException('Este e-mail já está cadastrado');
+  async register(input: RegisterInputParsed, userAgent?: string): Promise<Session> {
+    const [emailTaken, cpfTaken] = await Promise.all([
+      this.prisma.user.findUnique({ where: { email: input.email }, select: { id: true } }),
+      this.prisma.userCpf.findUnique({ where: { cpf: input.cpf }, select: { userId: true } }),
+    ]);
+    if (emailTaken || cpfTaken) {
+      throw new ConflictException({
+        message: emailTaken ? 'Este e-mail já está cadastrado' : 'Este CPF já está cadastrado',
+        fields: {
+          ...(emailTaken ? { email: ['Este e-mail já está cadastrado'] } : {}),
+          ...(cpfTaken ? { cpf: ['Este CPF já está cadastrado'] } : {}),
+        },
+      });
+    }
 
     const passwordHash = await hashPassword(input.password);
 
     const user = await this.prisma.$transaction(async (tx) => {
       const created = await tx.user.create({
-        data: { name: input.name, email: input.email, passwordHash },
+        data: {
+          name: input.name,
+          email: input.email,
+          passwordHash,
+          cpf: { create: { cpf: input.cpf } },
+          termsAcceptedAt: new Date(),
+          termsVersion: TERMS_VERSION,
+          // E-mails da configuração já nascem super administradores
+          role: this.config.superAdminEmails.includes(input.email)
+            ? UserRole.SUPER_ADMIN
+            : UserRole.USER,
+        },
         select: USER_SELECT,
       });
       await this.categories.createDefaults(tx, created.id);
       return created;
     });
 
+    await this.emailVerification.send(user.id);
     return this.createSession(toUserDto(user), userAgent);
   }
 
   async login(input: LoginInput, userAgent?: string): Promise<Session> {
-    const user = await this.prisma.user.findUnique({
-      where: { email: input.email },
-      select: { ...USER_SELECT, passwordHash: true },
+    // E-mail ou CPF; o que não for nenhum dos dois cai no mesmo erro (e no mesmo tempo)
+    const user = await findUserByIdentifier(this.prisma, input.identifier, {
+      ...USER_SELECT,
+      passwordHash: true,
     });
 
     const valid = await verifyPassword(input.password, user?.passwordHash);
-    if (!user || !valid) throw new UnauthorizedException('E-mail ou senha inválidos');
+    if (!user || !valid) throw new UnauthorizedException('E-mail, CPF ou senha inválidos');
+    // Depois da senha: só quem sabe a senha descobre que a conta está suspensa
+    if (user.status === UserStatus.SUSPENDED) {
+      throw new ForbiddenException('Sua conta está suspensa. Fale com o suporte.');
+    }
 
     return this.createSession(toUserDto(user), userAgent);
   }
 
   async refresh(refreshToken: string, userAgent?: string): Promise<Session> {
     const rotated = await this.refreshTokens.rotate(refreshToken, userAgent);
+    const status = await this.prisma.user.findUnique({
+      where: { id: rotated.userId },
+      select: { status: true },
+    });
+    if (status?.status === UserStatus.SUSPENDED) {
+      await this.refreshTokens.revokeAll(rotated.userId);
+      throw new UnauthorizedException('Sua conta está suspensa. Fale com o suporte.');
+    }
     const user = await this.getUser(rotated.userId);
     return {
       ...(await this.createAccessToken(user)),

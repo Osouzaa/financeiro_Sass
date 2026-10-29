@@ -1,5 +1,6 @@
 import { Navigate, Outlet, useLocation } from 'react-router';
 import { LogoMark } from '@/components/Logo';
+import { LandingPage } from '@/features/landing/LandingPage';
 import { useAuth } from './auth-context';
 
 function FullScreenLoader() {
@@ -19,6 +20,8 @@ export function RequireAuth() {
   const location = useLocation();
 
   if (status === 'loading') return <FullScreenLoader />;
+  // Visitante no endereço principal vê a página de divulgação; nas demais, vai para o login
+  if (status === 'anonymous' && location.pathname === '/') return <LandingPage />;
   if (status === 'anonymous')
     return <Navigate to="/entrar" replace state={{ from: location.pathname }} />;
   return <Outlet />;

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { passwordSchema } from './auth';
+import { cpfSchema, passwordSchema } from './auth';
 
 export const updateProfileSchema = z.object({
   name: z
@@ -12,10 +12,13 @@ export const updateProfileSchema = z.object({
     .trim()
     .toLowerCase()
     .pipe(z.email({ error: 'Informe um e-mail válido' })),
-  /** Obrigatória apenas quando o e-mail muda. */
+  /** Opcional para contas antigas, criadas antes do CPF ser pedido no cadastro. */
+  cpf: z.union([cpfSchema, z.literal('').transform(() => undefined)]).optional(),
+  /** Obrigatória quando o e-mail ou o CPF muda: os dois servem para entrar. */
   currentPassword: z.string().optional(),
 });
-export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
+export type UpdateProfileInput = z.input<typeof updateProfileSchema>;
+export type UpdateProfileInputParsed = z.output<typeof updateProfileSchema>;
 
 export const changePasswordSchema = z
   .object({

@@ -8,6 +8,9 @@ export class ApiError extends Error {
     readonly status: number,
     message: string,
     readonly fields: Record<string, string[]> = {},
+    /** Código estável do erro (ex.: PLAN_LIMIT) e seus dados. */
+    readonly code?: string,
+    readonly meta: Record<string, string> = {},
   ) {
     super(message);
     this.name = 'ApiError';
@@ -98,6 +101,8 @@ async function request(path: string, options: RequestOptions): Promise<Response>
       response.status,
       error?.message ?? `Erro ${response.status}`,
       error?.fields ?? {},
+      error?.code,
+      error?.meta ?? {},
     );
   }
   return response;

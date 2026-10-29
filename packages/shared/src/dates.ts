@@ -99,3 +99,32 @@ export function todayIso(timeZone = 'America/Sao_Paulo', now: Date = new Date())
     day: '2-digit',
   }).format(now);
 }
+
+const toUtcDay = (value: IsoDate) => {
+  const { year, month, day } = parseIsoDate(value);
+  return Date.UTC(year, month - 1, day) / 86_400_000;
+};
+
+/** Soma (ou subtrai) dias a uma data ISO. */
+export function addDays(value: IsoDate, amount: number): IsoDate {
+  const date = new Date((toUtcDay(value) + amount) * 86_400_000);
+  return formatIsoDate({
+    year: date.getUTCFullYear(),
+    month: date.getUTCMonth() + 1,
+    day: date.getUTCDate(),
+  });
+}
+
+/** Quantidade de dias de `from` até `to` (negativa se `to` vier antes). */
+export function daysBetween(from: IsoDate, to: IsoDate): number {
+  return toUtcDay(to) - toUtcDay(from);
+}
+
+/** Primeiro e último dia de um mês `YYYY-MM`. */
+export function monthBounds(value: YearMonth): { from: IsoDate; to: IsoDate } {
+  const { year, month } = parseYearMonth(value);
+  return {
+    from: formatIsoDate({ year, month, day: 1 }),
+    to: formatIsoDate({ year, month, day: daysInMonth(year, month) }),
+  };
+}

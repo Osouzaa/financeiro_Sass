@@ -8,7 +8,12 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
   private readonly logger = new Logger(PrismaService.name);
 
   constructor(config: AppConfig) {
-    super({ adapter: new PrismaMssql(config.databaseUrl) });
+    super({
+      adapter: new PrismaMssql(config.databaseUrl),
+      // O padrão (5 s) é curto para operações em lote, como gerar uma recorrência
+      // semanal de anos ou uma compra em 120x; acima disso a transação é desfeita
+      transactionOptions: { maxWait: 5_000, timeout: 20_000 },
+    });
   }
 
   async onModuleInit(): Promise<void> {

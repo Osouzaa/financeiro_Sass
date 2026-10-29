@@ -16,6 +16,12 @@ describe('parseEnv', () => {
     expect(() => parseEnv({})).toThrow(/DATABASE_URL/);
   });
 
+  it('exige SMTP em produção, para a recuperação de senha funcionar', () => {
+    expect(() =>
+      parseEnv({ ...base, NODE_ENV: 'production', JWT_ACCESS_SECRET: 'x'.repeat(40) }),
+    ).toThrow(/SMTP_HOST/);
+  });
+
   it('impede o segredo de exemplo em produção', () => {
     expect(() =>
       parseEnv({

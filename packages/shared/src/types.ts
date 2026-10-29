@@ -1,4 +1,19 @@
-import type { AccountType, CategoryType } from './enums';
+import type {
+  AccountType,
+  CategoryType,
+  InvoiceStatus,
+  RecurrenceFrequency,
+  TransactionStatus,
+  TransactionType,
+} from './enums';
+import type {
+  PlanInterval,
+  PlanLimits,
+  PaymentStatus,
+  SubscriptionStatus,
+  UserRole,
+  UserStatus,
+} from './schemas/plan';
 import type { AlertPreferences } from './schemas/profile';
 
 /** Contratos de resposta da API (o que o front recebe). */
@@ -9,9 +24,16 @@ export interface UserDto {
   email: string;
   /** Muda sempre que a foto muda; null quando não há foto. Usado para invalidar cache. */
   avatarVersion: string | null;
+  emailVerified: boolean;
+  role: UserRole;
 }
 
 export interface ProfileDto extends UserDto {
+  /** CPF mascarado ("***.982.247-**"); o documento inteiro nunca sai da API. */
+  cpfMasked: string | null;
+  /** Celular para o WhatsApp; é do próprio usuário, então vai completo. */
+  phone: { number: string; whatsappOptIn: boolean; verified: boolean } | null;
+  termsAcceptedAt: string | null;
   alerts: AlertPreferences;
   createdAt: string;
 }
@@ -37,6 +59,9 @@ export interface CategoryDto {
   color: string | null;
   icon: string | null;
   parentId: string | null;
+  archived: boolean;
+  /** Lançamentos, recorrências e orçamentos que usam a categoria (sem contar subcategorias). */
+  usageCount: number;
   children: CategoryDto[];
 }
 
@@ -58,10 +83,328 @@ export interface AccountDto {
   paymentAccountId: string | null;
 }
 
+/** Conta resumida, embutida em lançamentos. */
+export interface AccountRefDto {
+  id: string;
+  name: string;
+  type: AccountType;
+  color: string | null;
+}
+
+export interface CategoryRefDto {
+  id: string;
+  name: string;
+  color: string | null;
+  icon: string | null;
+  parentId: string | null;
+}
+
+export interface TransactionDto {
+  id: string;
+  type: TransactionType;
+  /** Sempre positivo; o tipo define o sinal. */
+  amountCents: number;
+  description: string;
+  notes: string | null;
+  /** Data de competência: quando aconteceu. */
+  date: string;
+  /** Quando o dinheiro entra ou sai. Nula em compras no cartão. */
+  cashDate: string | null;
+  status: TransactionStatus;
+  account: AccountRefDto;
+  category: CategoryRefDto | null;
+  /** Só em transferências. */
+  transfer: {
+    groupId: string;
+    /** IN: o dinheiro entra na `account`. OUT: sai dela. */
+    direction: 'IN' | 'OUT';
+    counterpart: AccountRefDto | null;
+  } | null;
+  /** Só em lançamentos no cartão de crédito. */
+  invoice: { referenceMonth: string; dueDate: string } | null;
+  /** Parcela de uma compra parcelada. */
+  installment: { groupId: string; number: number; total: number } | null;
+  /** Ocorrência gerada por uma recorrência. */
+  recurrenceId: string | null;
+}
+
+export interface CategoryTotalDto {
+  /** Categoria principal (subcategorias somam na categoria-mãe). */
+  categoryId: string;
+  name: string;
+  color: string | null;
+  icon: string | null;
+  totalCents: number;
+}
+
+export interface TransactionSummaryDto {
+  incomeCents: number;
+  expenseCents: number;
+  /** Receitas − despesas. Transferências não entram. */
+  netCents: number;
+  /** Parte das receitas/despesas que ainda está prevista. */
+  plannedIncomeCents: number;
+  plannedExpenseCents: number;
+  /** Despesas por categoria, da maior para a menor. */
+  expensesByCategory: CategoryTotalDto[];
+}
+
+export interface TransactionListDto {
+  items: TransactionDto[];
+  summary: TransactionSummaryDto;
+  /** true quando o período tem mais lançamentos do que o limite da resposta. */
+  truncated: boolean;
+}
+
+export interface InvoiceDto {
+  id: string;
+  account: AccountRefDto;
+  /** Conta padrão de pagamento do cartão. */
+  paymentAccountId: string | null;
+  /** Mês do vencimento, `YYYY-MM`. */
+  referenceMonth: string;
+  closingDate: string;
+  dueDate: string;
+  /** Calculado na leitura a partir das datas e dos pagamentos. */
+  status: InvoiceStatus;
+  /** Vencida sem pagamento completo. */
+  overdue: boolean;
+  purchasesCents: number;
+  /** Estornos abatidos na fatura. */
+  refundsCents: number;
+  /** Compras − estornos. */
+  totalCents: number;
+  /** Pagamentos realizados. */
+  paidCents: number;
+  /** Pagamentos agendados (previstos). */
+  scheduledCents: number;
+  /** Quanto falta pagar (nunca negativo). */
+  remainingCents: number;
+}
+
+export interface InvoiceDetailDto extends InvoiceDto {
+  /** Compras, estornos e pagamentos da fatura. */
+  items: TransactionDto[];
+}
+
+export interface RecurrenceDto {
+  id: string;
+  type: 'INCOME' | 'EXPENSE';
+  account: AccountRefDto;
+  category: CategoryRefDto | null;
+  amountCents: number;
+  description: string;
+  frequency: RecurrenceFrequency;
+  startDate: string;
+  endDate: string | null;
+  /** Próxima ocorrência a partir de hoje; null se já terminou. */
+  nextDate: string | null;
+  /** Peso mensal do valor (semanal × 52 ÷ 12, anual ÷ 12). */
+  monthlyCents: number;
+  active: boolean;
+}
+
+export interface BudgetItemDto {
+  id: string;
+  category: CategoryRefDto;
+  limitCents: number;
+  /** Despesas realizadas no mês (no cartão, toda compra conta como realizada). */
+  spentCents: number;
+  /** Despesas ainda previstas no mês. */
+  plannedCents: number;
+  /** Realizado + previsto: o que o mês vai consumir. */
+  usedCents: number;
+}
+
+export interface BudgetMonthDto {
+  month: string;
+  /** Percentual de alerta das preferências; null se o alerta de orçamento está desligado. */
+  alertPercent: number | null;
+  items: BudgetItemDto[];
+  /** Categorias com gasto no mês e sem limite definido. */
+  unbudgeted: { category: CategoryRefDto; usedCents: number }[];
+  totals: { limitCents: number; spentCents: number; usedCents: number };
+}
+
+export interface ProjectionPointDto {
+  date: string;
+  balanceCents: number;
+  inCents: number;
+  outCents: number;
+}
+
+export interface ProjectionEventDto {
+  date: string;
+  description: string;
+  /** Com sinal: positivo entra, negativo sai. */
+  amountCents: number;
+  kind: 'transaction' | 'invoice';
+  accountName: string;
+  /** Previsto para antes de hoje e ainda não realizado: entra na projeção como hoje. */
+  overdue: boolean;
+}
+
+export interface ProjectionDto {
+  from: string;
+  to: string;
+  /** Saldo atual das contas consideradas. */
+  startBalanceCents: number;
+  endBalanceCents: number;
+  points: ProjectionPointDto[];
+  lowest: { date: string; balanceCents: number };
+  /** Primeiro dia em que o saldo ficaria negativo; null se não fica. */
+  firstNegativeDate: string | null;
+  events: ProjectionEventDto[];
+}
+
+export interface PlanDto {
+  id: string;
+  code: string;
+  name: string;
+  description: string;
+  priceCents: number;
+  interval: PlanInterval;
+  isPublic: boolean;
+  isActive: boolean;
+  highlighted: boolean;
+  sortOrder: number;
+  trialDays: number;
+  features: string[];
+  limits: PlanLimits;
+}
+
+export interface PlanUsageDto {
+  accounts: number;
+  cards: number;
+  recurrences: number;
+  /** Limites de orçamento definidos no mês atual. */
+  budgets: number;
+}
+
+export interface MyPlanDto {
+  plan: PlanDto;
+  subscription: {
+    status: SubscriptionStatus;
+    currentPeriodEnd: string | null;
+    /** MANUAL (definida pelo super admin) ou MERCADO_PAGO. */
+    provider: string;
+    trialEndsAt: string | null;
+  } | null;
+  usage: PlanUsageDto;
+  billing: {
+    /** Pagamento configurado na API (credenciais do Mercado Pago presentes). */
+    enabled: boolean;
+    /** A pessoa ainda não usou o teste grátis. */
+    trialAvailable: boolean;
+  };
+}
+
+export interface AdminUserDto {
+  id: string;
+  name: string;
+  email: string;
+  emailVerified: boolean;
+  cpfMasked: string | null;
+  role: UserRole;
+  status: UserStatus;
+  plan: { id: string; code: string; name: string };
+  subscriptionStatus: SubscriptionStatus | null;
+  /** MANUAL ou MERCADO_PAGO; null sem assinatura. */
+  subscriptionProvider: string | null;
+  currentPeriodEnd: string | null;
+  createdAt: string;
+  usage: PlanUsageDto;
+}
+
+export interface PageDto<T> {
+  items: T[];
+  page: number;
+  pageSize: number;
+  total: number;
+}
+
+export interface AdminMetricsDto {
+  users: number;
+  newUsersLast30Days: number;
+  suspended: number;
+  byPlan: { planId: string; name: string; users: number }[];
+  /** Receita mensal recorrente estimada pelas assinaturas ativas (planos anuais ÷ 12). */
+  mrrCents: number;
+}
+
+export interface AuditEntryDto {
+  id: string;
+  actor: { id: string; name: string } | null;
+  action: string;
+  targetType: string;
+  targetId: string | null;
+  details: string | null;
+  createdAt: string;
+}
+
+export interface CheckoutDto {
+  /** Página do Mercado Pago onde a pessoa informa o cartão. */
+  url: string;
+}
+
+export interface PaymentDto {
+  id: string;
+  amountCents: number;
+  status: PaymentStatus;
+  description: string;
+  /** Quando foi aprovado; null se ainda não foi. */
+  paidAt: string | null;
+  createdAt: string;
+}
+
+export interface AdminPaymentDto extends PaymentDto {
+  user: { id: string; name: string; email: string } | null;
+  /** E-mail no momento do pagamento (fica mesmo se a conta for excluída). */
+  payerEmail: string | null;
+  providerPaymentId: string;
+}
+
+export interface WebhookEventDto {
+  id: string;
+  type: string;
+  resourceId: string | null;
+  /** RECEIVED | PROCESSED | IGNORED | FAILED | REJECTED (assinatura inválida) */
+  status: string;
+  error: string | null;
+  createdAt: string;
+}
+
+export interface AdminBillingDto {
+  configured: boolean;
+  /** Credencial de teste (sandbox) ou de produção. */
+  mode: 'test' | 'production' | null;
+  /** Endereço a cadastrar nos webhooks do Mercado Pago; null se API_PUBLIC_URL não estiver definida. */
+  webhookUrl: string | null;
+  webhookSecretConfigured: boolean;
+  revenueMonthCents: number;
+  approvedMonth: number;
+  failedMonth: number;
+  trialing: number;
+  active: number;
+  pastDue: number;
+  events: WebhookEventDto[];
+}
+
+/** Erro de limite do plano: o front mostra o convite para trocar de plano. */
+export interface PlanLimitErrorBody {
+  code: 'PLAN_LIMIT';
+  limit: keyof PlanLimits;
+  planName: string;
+}
+
 export interface ApiErrorBody {
   statusCode: number;
   error: string;
   message: string;
   /** Erros por campo, quando a validação falha. */
   fields?: Record<string, string[]>;
+  /** Código estável para o front reagir (ex.: PLAN_LIMIT). */
+  code?: string;
+  /** Dados do erro que acompanham o código (ex.: qual limite, qual plano). */
+  meta?: Record<string, string>;
 }

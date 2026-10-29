@@ -5,18 +5,24 @@ import type { CategoriesService } from '../categories/categories.service';
 import type { AppConfig } from '../config/app-config';
 import type { PrismaService } from '../prisma/prisma.service';
 import { AuthService, type JwtPayload } from './auth.service';
+import type { EmailVerificationService } from './email-verification.service';
 import type { RefreshTokenService } from './refresh-token.service';
 
 const SECRET = 'segredo-de-teste-com-mais-de-32-caracteres';
 
 function setup() {
   const user = { findUnique: jest.fn(), create: jest.fn(), update: jest.fn() };
+  const userCpf = { findUnique: jest.fn().mockResolvedValue(null) };
   const tx = { user };
   const prisma = {
     user,
+    userCpf,
     $transaction: jest.fn((callback: (client: typeof tx) => unknown) => callback(tx)),
   } as unknown as PrismaService;
-  const config = { jwt: { secret: SECRET, ttlSeconds: 900 } } as AppConfig;
+  const config = {
+    jwt: { secret: SECRET, ttlSeconds: 900 },
+    superAdminEmails: [],
+  } as unknown as AppConfig;
   const refreshTokens = {
     issue: jest.fn().mockResolvedValue({ id: 'rt', token: 'refresh-token', expiresAt: new Date() }),
     rotate: jest.fn(),
@@ -31,14 +37,31 @@ function setup() {
     config,
     refreshTokens as unknown as RefreshTokenService,
     categories as unknown as CategoriesService,
+    { send: jest.fn() } as unknown as EmailVerificationService,
   );
-  return { service, user, prisma, refreshTokens, categories, jwt };
+  return { service, user, userCpf, prisma, refreshTokens, categories, jwt };
 }
 
-const input = { name: 'Gabriel', email: 'gabriel@exemplo.com', password: 'senha1234' };
+const input = {
+  name: 'Gabriel',
+  email: 'gabriel@exemplo.com',
+  cpf: '52998224725',
+  password: 'senha1234',
+  acceptTerms: true,
+};
 
 describe('AuthService', () => {
   describe('register', () => {
+    it('recusa CPF já cadastrado, apontando o campo', async () => {
+      const { service, user, userCpf } = setup();
+      user.findUnique.mockResolvedValue(null);
+      userCpf.findUnique.mockResolvedValue({ userId: 'outra-pessoa' });
+      await expect(service.register(input)).rejects.toMatchObject({
+        response: { fields: { cpf: ['Este CPF já está cadastrado'] } },
+      });
+      expect(user.create).not.toHaveBeenCalled();
+    });
+
     it('recusa e-mail já cadastrado', async () => {
       const { service, user } = setup();
       user.findUnique.mockResolvedValue({ id: 'existente' });
@@ -68,6 +91,8 @@ describe('AuthService', () => {
         name: 'Gabriel',
         email: 'gabriel@exemplo.com',
         avatarVersion: null,
+        emailVerified: false,
+        role: 'USER',
       });
     });
   });
@@ -76,8 +101,8 @@ describe('AuthService', () => {
     it('recusa e-mail inexistente com a mesma mensagem de senha errada', async () => {
       const { service, user } = setup();
       user.findUnique.mockResolvedValue(null);
-      await expect(service.login({ email: input.email, password: 'x' })).rejects.toThrow(
-        'E-mail ou senha inválidos',
+      await expect(service.login({ identifier: input.email, password: 'x' })).rejects.toThrow(
+        'E-mail, CPF ou senha inválidos',
       );
     });
 
@@ -90,7 +115,7 @@ describe('AuthService', () => {
         passwordHash: await bcrypt.hash('outra123', 4),
       });
       await expect(
-        service.login({ email: input.email, password: input.password }),
+        service.login({ identifier: input.email, password: input.password }),
       ).rejects.toBeInstanceOf(UnauthorizedException);
       expect(refreshTokens.issue).not.toHaveBeenCalled();
     });
@@ -103,12 +128,14 @@ describe('AuthService', () => {
         email: input.email,
         passwordHash: await bcrypt.hash(input.password, 4),
       });
-      const session = await service.login({ email: input.email, password: input.password });
+      const session = await service.login({ identifier: input.email, password: input.password });
       expect(session.user).toEqual({
         id: 'u1',
         name: 'G',
         email: input.email,
         avatarVersion: null,
+        emailVerified: false,
+        role: 'USER',
       });
       expect(session.user).not.toHaveProperty('passwordHash');
     });

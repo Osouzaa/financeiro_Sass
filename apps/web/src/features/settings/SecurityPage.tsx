@@ -15,6 +15,7 @@ import { useAuth } from '@/features/auth/auth-context';
 import { passwordStrength } from '@/features/auth/password-strength';
 import { api, ApiError } from '@/lib/api';
 import { describeDevice } from './device';
+import { DataSection } from './DataSection';
 import { SettingsSection } from './SettingsLayout';
 
 export function SecurityPage() {
@@ -22,6 +23,7 @@ export function SecurityPage() {
     <div className="space-y-4">
       <PasswordSection />
       <SessionsSection />
+      <DataSection />
     </div>
   );
 }

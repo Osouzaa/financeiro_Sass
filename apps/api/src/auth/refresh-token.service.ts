@@ -1,5 +1,5 @@
 import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { AppConfig } from '../config/app-config';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -26,6 +26,9 @@ export interface RotationResult extends IssuedRefreshToken {
  * - Cada uso revoga o token e emite outro.
  * - Se um token já revogado for reapresentado fora da janela de tolerância,
  *   assumimos vazamento e revogamos TODAS as sessões do usuário.
+ * - A tolerância vale só para token revogado por rotação (tem `replacedBy`).
+ *   Revogado de propósito (logout, troca de senha, desconectar dispositivo)
+ *   não volta a valer nunca, nem um segundo depois.
  */
 @Injectable()
 export class RefreshTokenService {
@@ -36,11 +39,21 @@ export class RefreshTokenService {
     private readonly config: AppConfig,
   ) {}
 
-  async issue(userId: string, userAgent?: string): Promise<IssuedRefreshToken & { id: string }> {
+  async issue(
+    userId: string,
+    userAgent?: string,
+    id?: string,
+  ): Promise<IssuedRefreshToken & { id: string }> {
     const token = randomBytes(48).toString('base64url');
     const expiresAt = new Date(Date.now() + this.config.refreshToken.ttlDays * 86_400_000);
     const record = await this.prisma.refreshToken.create({
-      data: { userId, tokenHash: hashToken(token), expiresAt, userAgent: userAgent?.slice(0, 300) },
+      data: {
+        ...(id ? { id } : {}),
+        userId,
+        tokenHash: hashToken(token),
+        expiresAt,
+        userAgent: userAgent?.slice(0, 300),
+      },
       select: { id: true },
     });
     return { id: record.id, token, expiresAt };
@@ -50,21 +63,30 @@ export class RefreshTokenService {
     const now = new Date();
     const record = await this.prisma.refreshToken.findUnique({
       where: { tokenHash: hashToken(token) },
-      select: { id: true, userId: true, expiresAt: true, revokedAt: true },
+      select: { id: true, userId: true, expiresAt: true },
     });
 
     if (!record || record.expiresAt <= now) {
       throw new UnauthorizedException('Sessão expirada. Entre novamente.');
     }
 
-    // Reivindica o token de forma atômica: só uma requisição consegue revogá-lo.
+    // Reivindica o token de forma atômica e já registra quem o substitui:
+    // assim, quem chegar depois sabe que foi rotação, e não logout
+    const nextId = randomUUID();
     const claimed = await this.prisma.refreshToken.updateMany({
       where: { id: record.id, revokedAt: null },
-      data: { revokedAt: now },
+      data: { revokedAt: now, replacedBy: nextId },
     });
 
     if (claimed.count === 0) {
-      const revokedAt = record.revokedAt ?? now;
+      const current = await this.prisma.refreshToken.findUnique({
+        where: { id: record.id },
+        select: { revokedAt: true, replacedBy: true },
+      });
+      if (!current?.replacedBy) {
+        throw new UnauthorizedException('Sessão encerrada. Entre novamente.');
+      }
+      const revokedAt = current.revokedAt ?? now;
       if (now.getTime() - revokedAt.getTime() > REUSE_GRACE_MS) {
         this.logger.warn(`Reutilização de refresh token detectada (usuário ${record.userId})`);
         await this.revokeAll(record.userId);
@@ -72,13 +94,11 @@ export class RefreshTokenService {
       }
     }
 
-    const next = await this.issue(record.userId, userAgent);
-    if (claimed.count === 1) {
-      await this.prisma.refreshToken.update({
-        where: { id: record.id },
-        data: { replacedBy: next.id },
-      });
-    }
+    const next = await this.issue(
+      record.userId,
+      userAgent,
+      claimed.count === 1 ? nextId : undefined,
+    );
     return { userId: record.userId, token: next.token, expiresAt: next.expiresAt };
   }
 

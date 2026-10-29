@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  HttpCode,
   Patch,
   Put,
   Res,
@@ -15,22 +16,30 @@ import { ApiBearerAuth, ApiBody, ApiConsumes, ApiOperation, ApiTags } from '@nes
 import {
   alertPreferencesSchema,
   AVATAR_MAX_BYTES,
+  deleteAccountSchema,
+  phoneInputSchema,
+  type DeleteAccountInput,
+  type PhoneInputParsed,
   updateProfileSchema,
   type AlertPreferences,
   type ProfileDto,
-  type UpdateProfileInput,
+  type UpdateProfileInputParsed,
   type UserDto,
 } from '@financeiro/shared';
 import type { Response } from 'express';
 import { CurrentUser, type AuthUser } from '../common/decorators/current-user.decorator';
 import { openApiSchema, ZodValidationPipe } from '../common/zod/zod-validation.pipe';
+import { AccountDataService } from './account-data.service';
 import { UsersService } from './users.service';
 
 @ApiTags('Perfil')
 @ApiBearerAuth()
 @Controller('me')
 export class UsersController {
-  constructor(private readonly users: UsersService) {}
+  constructor(
+    private readonly users: UsersService,
+    private readonly accountData: AccountDataService,
+  ) {}
 
   @Get()
   @ApiOperation({ summary: 'Perfil completo do usuário autenticado' })
@@ -43,9 +52,51 @@ export class UsersController {
   @ApiBody({ schema: openApiSchema(updateProfileSchema) })
   update(
     @CurrentUser() user: AuthUser,
-    @Body(new ZodValidationPipe(updateProfileSchema)) body: UpdateProfileInput,
+    @Body(new ZodValidationPipe(updateProfileSchema)) body: UpdateProfileInputParsed,
   ): Promise<UserDto> {
     return this.users.updateProfile(user.id, body);
+  }
+
+  @Put('phone')
+  @ApiOperation({ summary: 'Cadastra ou troca o celular do WhatsApp (com o consentimento)' })
+  @ApiBody({ schema: openApiSchema(phoneInputSchema) })
+  setPhone(
+    @CurrentUser() user: AuthUser,
+    @Body(new ZodValidationPipe(phoneInputSchema)) body: PhoneInputParsed,
+  ): Promise<ProfileDto> {
+    return this.users.setPhone(user.id, body);
+  }
+
+  @Delete('phone')
+  @ApiOperation({ summary: 'Remove o celular e o consentimento do WhatsApp' })
+  removePhone(@CurrentUser() user: AuthUser): Promise<ProfileDto> {
+    return this.users.removePhone(user.id);
+  }
+
+  @Get('export')
+  @ApiOperation({ summary: 'Baixa todos os dados da conta em JSON (portabilidade, LGPD)' })
+  async exportData(
+    @CurrentUser() user: AuthUser,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<StreamableFile> {
+    const data = await this.accountData.export(user.id);
+    res.set({
+      'Content-Type': 'application/json; charset=utf-8',
+      'Content-Disposition': `attachment; filename="meus-dados-${data.exportedAt.slice(0, 10)}.json"`,
+      'Cache-Control': 'no-store',
+    });
+    return new StreamableFile(Buffer.from(JSON.stringify(data, null, 2), 'utf8'));
+  }
+
+  @Delete()
+  @HttpCode(204)
+  @ApiOperation({ summary: 'Exclui a conta e todos os dados (pede a senha e a palavra EXCLUIR)' })
+  @ApiBody({ schema: openApiSchema(deleteAccountSchema) })
+  deleteAccount(
+    @CurrentUser() user: AuthUser,
+    @Body(new ZodValidationPipe(deleteAccountSchema)) body: DeleteAccountInput,
+  ): Promise<void> {
+    return this.accountData.delete(user.id, body.password);
   }
 
   @Put('alerts')

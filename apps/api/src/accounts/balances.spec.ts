@@ -47,4 +47,13 @@ describe('computeBalance', () => {
     ]);
     expect(result).toEqual({ balanceCents: 85_000, availableLimitCents: 415_000 });
   });
+
+  it('cartão: pagamento ainda previsto não abate a dívida', () => {
+    const card = { type: 'CREDIT_CARD', initialBalanceCents: 0, creditLimitCents: 500_000 };
+    const result = computeBalance(card, [
+      total({ type: 'EXPENSE', amount: '2000.00' }),
+      total({ type: 'TRANSFER', status: 'PLANNED', transferDirection: 'IN', amount: '2000.00' }),
+    ]);
+    expect(result.balanceCents).toBe(200_000);
+  });
 });

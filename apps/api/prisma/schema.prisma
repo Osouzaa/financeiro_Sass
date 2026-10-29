@@ -39,10 +39,30 @@ model User {
   alertBudgetPercent   Int     @default(80) @map("AlertBudgetPercent") @db.TinyInt
   alertNegativeBalance Boolean @default(true) @map("AlertNegativeBalance")
 
+  /// Confirmação do e-mail (link enviado no cadastro e ao trocar o e-mail)
+  emailVerifiedAt DateTime? @map("EmailVerifiedAt") @db.DateTime2
+  /// Aceite dos Termos de uso e da Política de privacidade
+  termsAcceptedAt DateTime? @map("TermsAcceptedAt") @db.DateTime2
+  termsVersion    String?   @map("TermsVersion") @db.VarChar(20)
+  /// USER | SUPER_ADMIN
+  role            String    @default("USER") @map("Role") @db.VarChar(20)
+  /// Quando usou o teste grátis (um por pessoa, para sempre)
+  trialUsedAt     DateTime? @map("TrialUsedAt") @db.DateTime2
+  /// ACTIVE | SUSPENDED
+  status          String    @default("ACTIVE") @map("Status") @db.VarChar(20)
+
   createdAt DateTime @default(now()) @map("CreatedAt") @db.DateTime2
   updatedAt DateTime @updatedAt @map("UpdatedAt") @db.DateTime2
 
   refreshTokens RefreshToken[]
+  cpf           UserCpf?
+  resetTokens   PasswordResetToken[]
+  phone         UserPhone?
+  emailTokens   EmailVerificationToken[]
+  subscription  Subscription?
+  auditEntries  AdminAuditLog[]
+  checkouts     CheckoutSession[]
+  payments      Payment[]
   accounts      Account[]
   categories    Category[]
   invoices      Invoice[]
@@ -51,6 +71,215 @@ model User {
   budgets       Budget[]
 
   @@map("Users")
+}
+
+/// Celular para o assistente no WhatsApp (opcional, cadastrado depois). Em E.164.
+model UserPhone {
+  userId        String    @id @map("UserId") @db.UniqueIdentifier
+  phone         String    @unique(map: "UQ_UserPhones_Phone") @map("Phone") @db.VarChar(16)
+  /// Consentimento explícito para receber mensagens
+  whatsappOptIn Boolean   @default(false) @map("WhatsappOptIn")
+  optInAt       DateTime? @map("OptInAt") @db.DateTime2
+  /// Confirmado por código no WhatsApp, quando o assistente existir
+  verifiedAt    DateTime? @map("VerifiedAt") @db.DateTime2
+  createdAt     DateTime  @default(now()) @map("CreatedAt") @db.DateTime2
+  updatedAt     DateTime  @updatedAt @map("UpdatedAt") @db.DateTime2
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "FK_UserPhones_Users")
+
+  @@map("UserPhones")
+}
+
+/// Link de confirmação de e-mail. Só o hash SHA-256 do token; vale uma vez.
+model EmailVerificationToken {
+  id        String    @id @default(uuid()) @map("Id") @db.UniqueIdentifier
+  userId    String    @map("UserId") @db.UniqueIdentifier
+  tokenHash String    @unique(map: "UQ_EmailVerificationTokens_TokenHash") @map("TokenHash") @db.Char(64)
+  /// E-mail que o link confirma: se a pessoa trocar de novo antes, o link antigo não vale
+  email     String    @map("Email") @db.NVarChar(254)
+  expiresAt DateTime  @map("ExpiresAt") @db.DateTime2
+  usedAt    DateTime? @map("UsedAt") @db.DateTime2
+  createdAt DateTime  @default(now()) @map("CreatedAt") @db.DateTime2
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "FK_EmailVerificationTokens_Users")
+
+  @@index([userId], map: "IX_EmailVerificationTokens_UserId")
+  @@map("EmailVerificationTokens")
+}
+
+/// Plano de assinatura. Limites nulos = sem limite. Editado pelo super administrador.
+model Plan {
+  id             String   @id @default(uuid()) @map("Id") @db.UniqueIdentifier
+  code           String   @unique(map: "UQ_Plans_Code") @map("Code") @db.VarChar(30)
+  name           String   @map("Name") @db.NVarChar(40)
+  description    String   @default("") @map("Description") @db.NVarChar(200)
+  priceAmount    Decimal  @default(0) @map("PriceAmount") @db.Decimal(19, 2)
+  /// MONTH | YEAR
+  interval       String   @default("MONTH") @map("Interval") @db.VarChar(10)
+  /// Aparece na página de planos
+  isPublic       Boolean  @default(true) @map("IsPublic")
+  /// Pode ser atribuído a novas assinaturas
+  isActive       Boolean  @default(true) @map("IsActive")
+  highlighted    Boolean  @default(false) @map("Highlighted")
+  sortOrder      Int      @default(0) @map("SortOrder")
+  /// Lista de destaques para a página de planos (JSON: string[])
+  features       String   @default("[]") @map("Features") @db.NVarChar(2000)
+  maxAccounts    Int?     @map("MaxAccounts")
+  maxCards       Int?     @map("MaxCards")
+  maxRecurrences Int?     @map("MaxRecurrences")
+  maxBudgets     Int?     @map("MaxBudgets")
+  projectionDays Int      @default(30) @map("ProjectionDays")
+  whatsapp       Boolean  @default(false) @map("Whatsapp")
+  /// Dias grátis na primeira assinatura
+  trialDays      Int      @default(0) @map("TrialDays")
+  createdAt      DateTime @default(now()) @map("CreatedAt") @db.DateTime2
+  updatedAt      DateTime @updatedAt @map("UpdatedAt") @db.DateTime2
+
+  subscriptions Subscription[]
+  checkouts     CheckoutSession[]
+
+  @@map("Plans")
+}
+
+/// Assinatura atual da conta (uma por usuário). Sem assinatura, vale o plano grátis.
+model Subscription {
+  id               String    @id @default(uuid()) @map("Id") @db.UniqueIdentifier
+  userId           String    @unique(map: "UQ_Subscriptions_UserId") @map("UserId") @db.UniqueIdentifier
+  planId           String    @map("PlanId") @db.UniqueIdentifier
+  /// TRIALING | ACTIVE | PAST_DUE | CANCELED
+  status           String    @map("Status") @db.VarChar(20)
+  currentPeriodEnd DateTime? @map("CurrentPeriodEnd") @db.Date
+  /// MANUAL (definida pelo super admin) | MERCADO_PAGO
+  provider         String    @default("MANUAL") @map("Provider") @db.VarChar(20)
+  /// Id da assinatura no provedor de pagamento
+  providerRef      String?   @map("ProviderRef") @db.VarChar(100)
+  /// Fim do teste grátis, se a assinatura começou com teste
+  trialEndsAt      DateTime? @map("TrialEndsAt") @db.Date
+  canceledAt       DateTime? @map("CanceledAt") @db.DateTime2
+  createdAt        DateTime  @default(now()) @map("CreatedAt") @db.DateTime2
+  updatedAt        DateTime  @updatedAt @map("UpdatedAt") @db.DateTime2
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "FK_Subscriptions_Users")
+  plan Plan @relation(fields: [planId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "FK_Subscriptions_Plans")
+
+  @@index([planId], map: "IX_Subscriptions_PlanId")
+  @@map("Subscriptions")
+}
+
+/// Cada ida ao Mercado Pago para assinar. O id vai como external_reference: é ele
+/// que liga a assinatura do Mercado Pago ao usuário, sem depender do e-mail.
+model CheckoutSession {
+  id          String   @id @default(uuid()) @map("Id") @db.UniqueIdentifier
+  userId      String   @map("UserId") @db.UniqueIdentifier
+  planId      String   @map("PlanId") @db.UniqueIdentifier
+  /// PENDING | AUTHORIZED | CANCELED
+  status      String   @default("PENDING") @map("Status") @db.VarChar(20)
+  trialDays   Int      @default(0) @map("TrialDays")
+  amount      Decimal  @map("Amount") @db.Decimal(19, 2)
+  /// Id da assinatura (preapproval) no Mercado Pago
+  providerRef String?  @unique(map: "UQ_CheckoutSessions_ProviderRef") @map("ProviderRef") @db.VarChar(100)
+  initPoint   String?  @map("InitPoint") @db.NVarChar(500)
+  createdAt   DateTime @default(now()) @map("CreatedAt") @db.DateTime2
+  updatedAt   DateTime @updatedAt @map("UpdatedAt") @db.DateTime2
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "FK_CheckoutSessions_Users")
+  plan Plan @relation(fields: [planId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "FK_CheckoutSessions_Plans")
+
+  @@index([userId], map: "IX_CheckoutSessions_UserId")
+  @@map("CheckoutSessions")
+}
+
+/// Cobrança feita pelo provedor. Registro financeiro: fica mesmo se a conta for excluída.
+model Payment {
+  id                String    @id @default(uuid()) @map("Id") @db.UniqueIdentifier
+  /// Nulo se a conta foi excluída depois
+  userId            String?   @map("UserId") @db.UniqueIdentifier
+  /// MERCADO_PAGO
+  provider          String    @map("Provider") @db.VarChar(20)
+  /// Id da cobrança no provedor (authorized_payment do Mercado Pago)
+  providerPaymentId String    @unique(map: "UQ_Payments_ProviderPaymentId") @map("ProviderPaymentId") @db.VarChar(100)
+  /// Id da assinatura no provedor
+  providerRef       String?   @map("ProviderRef") @db.VarChar(100)
+  amount            Decimal   @map("Amount") @db.Decimal(19, 2)
+  /// PENDING | APPROVED | REJECTED | REFUNDED
+  status            String    @map("Status") @db.VarChar(20)
+  description       String    @map("Description") @db.NVarChar(200)
+  payerEmail        String?   @map("PayerEmail") @db.NVarChar(254)
+  paidAt            DateTime? @map("PaidAt") @db.DateTime2
+  createdAt         DateTime  @default(now()) @map("CreatedAt") @db.DateTime2
+  updatedAt         DateTime  @updatedAt @map("UpdatedAt") @db.DateTime2
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull, onUpdate: NoAction, map: "FK_Payments_Users")
+
+  @@index([userId], map: "IX_Payments_UserId")
+  @@index([createdAt], map: "IX_Payments_CreatedAt")
+  @@map("Payments")
+}
+
+/// Aviso recebido do provedor. Guardado para auditoria e para não processar duas vezes.
+model WebhookEvent {
+  id          String    @id @default(uuid()) @map("Id") @db.UniqueIdentifier
+  provider    String    @map("Provider") @db.VarChar(20)
+  /// x-request-id do Mercado Pago: identifica a entrega
+  requestId   String?   @unique(map: "UQ_WebhookEvents_RequestId") @map("RequestId") @db.VarChar(100)
+  type        String    @map("Type") @db.VarChar(60)
+  resourceId  String?   @map("ResourceId") @db.VarChar(100)
+  /// RECEIVED | PROCESSED | IGNORED | FAILED | REJECTED
+  status      String    @map("Status") @db.VarChar(20)
+  error       String?   @map("Error") @db.NVarChar(1000)
+  processedAt DateTime? @map("ProcessedAt") @db.DateTime2
+  createdAt   DateTime  @default(now()) @map("CreatedAt") @db.DateTime2
+
+  @@index([createdAt], map: "IX_WebhookEvents_CreatedAt")
+  @@map("WebhookEvents")
+}
+
+/// Registro do que o super administrador fez (trocar plano, suspender, editar plano).
+model AdminAuditLog {
+  id         String   @id @default(uuid()) @map("Id") @db.UniqueIdentifier
+  /// Quem fez; nulo se a conta foi excluída depois
+  actorId    String?  @map("ActorId") @db.UniqueIdentifier
+  action     String   @map("Action") @db.VarChar(50)
+  targetType String   @map("TargetType") @db.VarChar(30)
+  targetId   String?  @map("TargetId") @db.VarChar(64)
+  details    String?  @map("Details") @db.NVarChar(2000)
+  createdAt  DateTime @default(now()) @map("CreatedAt") @db.DateTime2
+
+  actor User? @relation(fields: [actorId], references: [id], onDelete: SetNull, onUpdate: NoAction, map: "FK_AdminAuditLogs_Users")
+
+  @@index([createdAt], map: "IX_AdminAuditLogs_CreatedAt")
+  @@map("AdminAuditLogs")
+}
+
+/// CPF do usuário (1:1). Em tabela própria porque, no SQL Server, uma coluna UNIQUE
+/// aceita só um NULL, e contas antigas não têm CPF. Guardado só com os 11 dígitos.
+model UserCpf {
+  userId    String   @id @map("UserId") @db.UniqueIdentifier
+  cpf       String   @unique(map: "UQ_UserCpfs_Cpf") @map("Cpf") @db.Char(11)
+  createdAt DateTime @default(now()) @map("CreatedAt") @db.DateTime2
+  updatedAt DateTime @updatedAt @map("UpdatedAt") @db.DateTime2
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "FK_UserCpfs_Users")
+
+  @@map("UserCpfs")
+}
+
+/// Pedido de redefinição de senha. Guardamos só o hash SHA-256 do token do link;
+/// ele vale por pouco tempo e só uma vez.
+model PasswordResetToken {
+  id        String    @id @default(uuid()) @map("Id") @db.UniqueIdentifier
+  userId    String    @map("UserId") @db.UniqueIdentifier
+  tokenHash String    @unique(map: "UQ_PasswordResetTokens_TokenHash") @map("TokenHash") @db.Char(64)
+  expiresAt DateTime  @map("ExpiresAt") @db.DateTime2
+  usedAt    DateTime? @map("UsedAt") @db.DateTime2
+  /// IP de quem pediu, para auditoria de abuso
+  requestIp String?   @map("RequestIp") @db.VarChar(45)
+  createdAt DateTime  @default(now()) @map("CreatedAt") @db.DateTime2
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "FK_PasswordResetTokens_Users")
+
+  @@index([userId], map: "IX_PasswordResetTokens_UserId")
+  @@map("PasswordResetTokens")
 }
 
 /// Refresh tokens com rotação. Guardamos apenas o hash SHA-256 do token.
@@ -133,7 +362,8 @@ model Invoice {
   referenceMonth String   @map("ReferenceMonth") @db.Char(7)
   closingDate    DateTime @map("ClosingDate") @db.Date
   dueDate        DateTime @map("DueDate") @db.Date
-  /// OPEN | CLOSED | PARTIALLY_PAID | PAID
+  /// Reservado: o status (OPEN | CLOSED | PARTIALLY_PAID | PAID) é calculado na leitura
+  /// a partir das datas e dos pagamentos ligados à fatura (invoices/invoice-math.ts)
   status         String   @default("OPEN") @map("Status") @db.VarChar(20)
   createdAt      DateTime @default(now()) @map("CreatedAt") @db.DateTime2
   updatedAt      DateTime @updatedAt @map("UpdatedAt") @db.DateTime2

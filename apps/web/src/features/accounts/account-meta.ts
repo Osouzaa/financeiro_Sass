@@ -1,4 +1,4 @@
-import type { AccountDto, AccountType } from '@financeiro/shared';
+import type { AccountDto, AccountRefDto, AccountType } from '@financeiro/shared';
 import { useQuery } from '@tanstack/react-query';
 import { CreditCard, Landmark, WalletMinimal, type LucideIcon } from 'lucide-react';
 import { api } from '@/lib/api';
@@ -44,4 +44,16 @@ export function useAccounts(includeArchived = false) {
     queryKey: ['accounts', { includeArchived }],
     queryFn: () => api<AccountDto[]>(`/accounts${includeArchived ? '?includeArchived=true' : ''}`),
   });
+}
+
+/** Contas ativas, mais a do lançamento em edição caso tenha sido arquivada depois. */
+export function selectableAccounts(
+  accounts: AccountDto[],
+  keep: (AccountRefDto | null | undefined)[],
+) {
+  const list: AccountRefDto[] = [...accounts];
+  for (const account of keep) {
+    if (account && !list.some((item) => item.id === account.id)) list.push(account);
+  }
+  return list;
 }
