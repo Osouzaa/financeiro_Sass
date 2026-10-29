@@ -7,6 +7,7 @@ import {
   PiggyBank,
   ReceiptText,
   Settings,
+  ShieldCheck,
   TrendingUp,
   Wallet,
   X,
@@ -17,6 +18,7 @@ import { Link, NavLink, Outlet } from 'react-router';
 import { Avatar } from '@/components/Avatar';
 import { Logo } from '@/components/Logo';
 import { useAuth } from '@/features/auth/auth-context';
+import { EmailVerificationBanner } from './EmailVerificationBanner';
 
 interface NavItem {
   to: string;
@@ -113,7 +115,10 @@ export function AppLayout() {
           ))}
         </nav>
 
-        <div className="border-t border-night-line px-3 py-3">
+        <div className="space-y-0.5 border-t border-night-line px-3 py-3">
+          {user?.role === 'SUPER_ADMIN' ? (
+            <SidebarLink to="/admin" label="Administração" icon={ShieldCheck} />
+          ) : null}
           <SidebarLink to="/configuracoes" label="Configurações" icon={Settings} />
         </div>
 
@@ -142,6 +147,7 @@ export function AppLayout() {
       </aside>
 
       <div className="flex min-w-0 flex-col">
+        <EmailVerificationBanner />
         <header className="sticky top-0 z-20 flex h-16 items-center gap-3 border-b border-line bg-canvas/85 px-5 backdrop-blur sm:px-8">
           <button
             type="button"

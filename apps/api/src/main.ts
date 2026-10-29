@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
@@ -8,8 +9,11 @@ import { AppModule } from './app.module';
 import { AppConfig } from './config/app-config';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
   const config = app.get(AppConfig);
+
+  // Atrás de proxy, o IP real vem no X-Forwarded-For; sem isso, o limite por IP pegaria o do proxy
+  if (config.trustProxy) app.set('trust proxy', 1);
 
   app.setGlobalPrefix('api/v1');
   app.use(helmet());

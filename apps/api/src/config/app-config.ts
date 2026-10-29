@@ -33,6 +33,35 @@ export class AppConfig {
     };
   }
 
+  get appUrl(): string {
+    return this.env.APP_URL.replace(/\/+$/, '');
+  }
+
+  get mail() {
+    return {
+      host: this.env.SMTP_HOST,
+      port: this.env.SMTP_PORT,
+      secure: this.env.SMTP_SECURE,
+      user: this.env.SMTP_USER,
+      pass: this.env.SMTP_PASS,
+      from: this.env.MAIL_FROM,
+    };
+  }
+
+  get superAdminEmails(): string[] {
+    return this.env.SUPER_ADMIN_EMAILS.split(',')
+      .map((email) => email.trim().toLowerCase())
+      .filter(Boolean);
+  }
+
+  get rateLimitEnabled(): boolean {
+    return this.env.RATE_LIMIT_ENABLED;
+  }
+
+  get trustProxy(): boolean {
+    return this.env.TRUST_PROXY;
+  }
+
   get refreshToken() {
     return {
       ttlDays: this.env.REFRESH_TOKEN_TTL_DAYS,

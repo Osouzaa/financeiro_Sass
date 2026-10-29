@@ -6,6 +6,13 @@ import type {
   TransactionStatus,
   TransactionType,
 } from './enums';
+import type {
+  PlanInterval,
+  PlanLimits,
+  SubscriptionStatus,
+  UserRole,
+  UserStatus,
+} from './schemas/plan';
 import type { AlertPreferences } from './schemas/profile';
 
 /** Contratos de resposta da API (o que o front recebe). */
@@ -16,9 +23,16 @@ export interface UserDto {
   email: string;
   /** Muda sempre que a foto muda; null quando não há foto. Usado para invalidar cache. */
   avatarVersion: string | null;
+  emailVerified: boolean;
+  role: UserRole;
 }
 
 export interface ProfileDto extends UserDto {
+  /** CPF mascarado ("***.982.247-**"); o documento inteiro nunca sai da API. */
+  cpfMasked: string | null;
+  /** Celular para o WhatsApp; é do próprio usuário, então vai completo. */
+  phone: { number: string; whatsappOptIn: boolean; verified: boolean } | null;
+  termsAcceptedAt: string | null;
   alerts: AlertPreferences;
   createdAt: string;
 }
@@ -242,10 +256,95 @@ export interface ProjectionDto {
   events: ProjectionEventDto[];
 }
 
+export interface PlanDto {
+  id: string;
+  code: string;
+  name: string;
+  description: string;
+  priceCents: number;
+  interval: PlanInterval;
+  isPublic: boolean;
+  isActive: boolean;
+  highlighted: boolean;
+  sortOrder: number;
+  features: string[];
+  limits: PlanLimits;
+}
+
+export interface PlanUsageDto {
+  accounts: number;
+  cards: number;
+  recurrences: number;
+  /** Limites de orçamento definidos no mês atual. */
+  budgets: number;
+}
+
+export interface MyPlanDto {
+  plan: PlanDto;
+  subscription: {
+    status: SubscriptionStatus;
+    currentPeriodEnd: string | null;
+    provider: string;
+  } | null;
+  usage: PlanUsageDto;
+}
+
+export interface AdminUserDto {
+  id: string;
+  name: string;
+  email: string;
+  emailVerified: boolean;
+  cpfMasked: string | null;
+  role: UserRole;
+  status: UserStatus;
+  plan: { id: string; code: string; name: string };
+  subscriptionStatus: SubscriptionStatus | null;
+  currentPeriodEnd: string | null;
+  createdAt: string;
+  usage: PlanUsageDto;
+}
+
+export interface PageDto<T> {
+  items: T[];
+  page: number;
+  pageSize: number;
+  total: number;
+}
+
+export interface AdminMetricsDto {
+  users: number;
+  newUsersLast30Days: number;
+  suspended: number;
+  byPlan: { planId: string; name: string; users: number }[];
+  /** Receita mensal recorrente estimada pelas assinaturas ativas (planos anuais ÷ 12). */
+  mrrCents: number;
+}
+
+export interface AuditEntryDto {
+  id: string;
+  actor: { id: string; name: string } | null;
+  action: string;
+  targetType: string;
+  targetId: string | null;
+  details: string | null;
+  createdAt: string;
+}
+
+/** Erro de limite do plano: o front mostra o convite para trocar de plano. */
+export interface PlanLimitErrorBody {
+  code: 'PLAN_LIMIT';
+  limit: keyof PlanLimits;
+  planName: string;
+}
+
 export interface ApiErrorBody {
   statusCode: number;
   error: string;
   message: string;
   /** Erros por campo, quando a validação falha. */
   fields?: Record<string, string[]>;
+  /** Código estável para o front reagir (ex.: PLAN_LIMIT). */
+  code?: string;
+  /** Dados do erro que acompanham o código (ex.: qual limite, qual plano). */
+  meta?: Record<string, string>;
 }

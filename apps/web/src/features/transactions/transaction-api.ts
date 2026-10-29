@@ -31,6 +31,7 @@ export function useInvalidateMoney() {
       queryClient.invalidateQueries({ queryKey: ['invoices'] }),
       queryClient.invalidateQueries({ queryKey: ['recurrences'] }),
       queryClient.invalidateQueries({ queryKey: ['budgets'] }),
+      queryClient.invalidateQueries({ queryKey: ['me-plan'] }),
       queryClient.invalidateQueries({ queryKey: ['projection'] }),
     ]);
 }

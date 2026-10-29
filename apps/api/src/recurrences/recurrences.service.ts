@@ -20,6 +20,7 @@ import { fromDbDate, toDbDate } from '../common/db-date';
 import type { Prisma } from '../generated/prisma/client';
 import { ACCOUNT_RULES, EntryRules } from '../ledger/entry-rules';
 import { entryData, removeEmptyInvoices } from '../ledger/invoice-ledger';
+import { PlansService } from '../plans/plans.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 /** Lançamentos previstos são gerados até o fim do mês daqui a 12 meses (base da projeção). */
@@ -91,6 +92,7 @@ export class RecurrencesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly rules: EntryRules,
+    private readonly plans: PlansService,
   ) {}
 
   async list(userId: string): Promise<RecurrenceDto[]> {
@@ -113,6 +115,10 @@ export class RecurrencesService {
 
   async create(userId: string, input: RecurrenceInputParsed): Promise<RecurrenceDto> {
     await this.validate(userId, input);
+    const active = await this.prisma.recurrence.count({
+      where: { userId, OR: [{ endDate: null }, { endDate: { gte: toDbDate(todayIso()) } }] },
+    });
+    await this.plans.assertWithin(userId, 'maxRecurrences', active);
     const created = await this.prisma.recurrence.create({
       data: { userId, ...this.toData(input), generatedUntil: null },
       select: { id: true },

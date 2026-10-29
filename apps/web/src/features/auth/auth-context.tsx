@@ -29,6 +29,10 @@ interface AuthContextValue {
   updateUser: (user: UserDto) => void;
   /** Troca a senha; a API devolve uma sessão nova para este dispositivo. */
   changePassword: (input: ChangePasswordInput) => Promise<void>;
+  /** Relê o usuário da API (ex.: depois de confirmar o e-mail). */
+  reloadUser: () => Promise<void>;
+  /** Encerra a sessão só neste navegador (a conta já foi excluída na API). */
+  endSession: () => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -82,9 +86,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSession(await api<AuthResponse>('/auth/password', { method: 'POST', body: input }));
   }, []);
 
+  const reloadUser = useCallback(async () => {
+    setUser(await api<UserDto>('/auth/me'));
+  }, []);
+
+  const endSession = useCallback(() => setSession(null), []);
+
   const value = useMemo(
-    () => ({ status, user, login, register, logout, updateUser, changePassword }),
-    [status, user, login, register, logout, updateUser, changePassword],
+    () => ({
+      status,
+      user,
+      login,
+      register,
+      logout,
+      updateUser,
+      changePassword,
+      reloadUser,
+      endSession,
+    }),
+    [status, user, login, register, logout, updateUser, changePassword, reloadUser, endSession],
   );
 
   return <AuthContext value={value}>{children}</AuthContext>;

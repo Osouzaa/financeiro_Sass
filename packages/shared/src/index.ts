@@ -1,5 +1,7 @@
 export * from './enums';
 export * from './dates';
+export * from './cpf';
+export * from './phone';
 export * from './money';
 export * from './billing';
 export * from './installments';
@@ -7,6 +9,8 @@ export * from './recurrence';
 export * from './schemas/auth';
 export * from './schemas/profile';
 export * from './schemas/account';
+export * from './schemas/account-settings';
+export * from './schemas/plan';
 export * from './schemas/budget';
 export * from './schemas/category';
 export * from './schemas/invoice';

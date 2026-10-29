@@ -40,6 +40,8 @@ export class AllExceptionsFilter implements ExceptionFilter {
         error: HttpStatus[statusCode] ?? 'Error',
         message,
         ...(data.fields ? { fields: data.fields as Record<string, string[]> } : {}),
+        ...(typeof data.code === 'string' ? { code: data.code } : {}),
+        ...(data.meta ? { meta: data.meta as Record<string, string> } : {}),
       };
     }
 

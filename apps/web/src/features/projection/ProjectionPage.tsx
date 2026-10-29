@@ -2,6 +2,7 @@ import { formatBRL, type ProjectionDto, type ProjectionEventDto } from '@finance
 import {
   CircleAlert,
   CircleCheck,
+  Lock,
   CreditCard,
   Landmark,
   TrendingDown,
@@ -12,6 +13,7 @@ import { useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { Select } from '@/components/inputs';
 import { useAccounts } from '@/features/accounts/account-meta';
+import { useMyPlan } from '@/features/plans/plan-api';
 import { PageHeader } from '@/layout/AppLayout';
 import { formatDayHeading, formatShortDate } from '@/lib/dates';
 import { useProjection } from './projection-api';
@@ -28,7 +30,11 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export function ProjectionPage() {
   const [params, setParams] = useSearchParams();
-  const days = PERIODS.find((p) => String(p.days) === params.get('dias'))?.days ?? 90;
+  // O plano define até onde dá para projetar; enquanto carrega, o mínimo de todos
+  const { data: myPlan } = useMyPlan();
+  const maxDays = myPlan?.plan.limits.projectionDays ?? 30;
+  const requested = PERIODS.find((p) => String(p.days) === params.get('dias'))?.days ?? 90;
+  const days = Math.min(requested, maxDays);
   const accountParam = params.get('conta');
   const { data: accounts = [], isPending: accountsPending } = useAccounts();
   const cash = accounts.filter((a) => a.type !== 'CREDIT_CARD');
@@ -80,17 +86,27 @@ export function ProjectionPage() {
                   key={period.days}
                   type="button"
                   aria-pressed={days === period.days}
+                  disabled={period.days > maxDays}
+                  title={
+                    period.days > maxDays ? `Disponível em planos com projeção maior` : undefined
+                  }
                   onClick={() => set('dias', period.days === 90 ? undefined : String(period.days))}
                   className={`h-9 rounded-[8px] px-3 text-sm font-medium transition-colors ${
                     days === period.days
                       ? 'bg-surface text-graphite shadow-sm'
                       : 'text-slate hover:text-graphite'
-                  }`}
+                  } inline-flex items-center gap-1.5 disabled:cursor-not-allowed disabled:opacity-50`}
                 >
+                  {period.days > maxDays ? <Lock size={13} aria-hidden="true" /> : null}
                   {period.label}
                 </button>
               ))}
             </div>
+            {myPlan && maxDays < 365 ? (
+              <Link to="/configuracoes/plano" className="link-ember text-sm">
+                Ver mais longe com o Pro
+              </Link>
+            ) : null}
             <Select
               aria-label="Conta"
               value={accountId ?? ''}

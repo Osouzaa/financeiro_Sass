@@ -12,15 +12,22 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiBody, ApiCookieAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import {
   changePasswordSchema,
+  forgotPasswordSchema,
   loginSchema,
   registerSchema,
+  resetPasswordSchema,
+  verifyEmailSchema,
+  type VerifyEmailInput,
+  type ForgotPasswordInput,
+  type ResetPasswordInput,
   type AuthResponse,
   type ChangePasswordInput,
   type SessionDto,
   type LoginInput,
-  type RegisterInput,
+  type RegisterInputParsed,
   type UserDto,
 } from '@financeiro/shared';
 import type { CookieOptions, Request, Response } from 'express';
@@ -29,6 +36,15 @@ import { Public } from '../common/decorators/public.decorator';
 import { openApiSchema, ZodValidationPipe } from '../common/zod/zod-validation.pipe';
 import { AppConfig } from '../config/app-config';
 import { AuthService, type Session } from './auth.service';
+import { EmailVerificationService } from './email-verification.service';
+import { PasswordResetService } from './password-reset.service';
+
+/** Limites por IP: brutos o bastante para travar robôs, folgados para quem erra a senha. */
+const LOGIN_LIMIT = { default: { limit: 10, ttl: 60_000 } };
+const REGISTER_LIMIT = { default: { limit: 5, ttl: 10 * 60_000 } };
+const FORGOT_LIMIT = { default: { limit: 5, ttl: 15 * 60_000 } };
+const RESET_LIMIT = { default: { limit: 10, ttl: 15 * 60_000 } };
+const RESEND_LIMIT = { default: { limit: 3, ttl: 10 * 60_000 } };
 
 export const REFRESH_COOKIE = 'fin_rt';
 /** O cookie só é enviado para as rotas de autenticação. */
@@ -39,15 +55,18 @@ const REFRESH_COOKIE_PATH = '/api/v1/auth';
 export class AuthController {
   constructor(
     private readonly auth: AuthService,
+    private readonly passwordReset: PasswordResetService,
+    private readonly emailVerification: EmailVerificationService,
     private readonly config: AppConfig,
   ) {}
 
   @Public()
+  @Throttle(REGISTER_LIMIT)
   @Post('register')
   @ApiOperation({ summary: 'Cria a conta e já inicia a sessão' })
   @ApiBody({ schema: openApiSchema(registerSchema) })
   async register(
-    @Body(new ZodValidationPipe(registerSchema)) body: RegisterInput,
+    @Body(new ZodValidationPipe(registerSchema)) body: RegisterInputParsed,
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ): Promise<AuthResponse> {
@@ -55,9 +74,10 @@ export class AuthController {
   }
 
   @Public()
+  @Throttle(LOGIN_LIMIT)
   @Post('login')
   @HttpCode(200)
-  @ApiOperation({ summary: 'Entra com e-mail e senha' })
+  @ApiOperation({ summary: 'Entra com e-mail ou CPF e senha' })
   @ApiBody({ schema: openApiSchema(loginSchema) })
   async login(
     @Body(new ZodValidationPipe(loginSchema)) body: LoginInput,
@@ -65,6 +85,54 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
   ): Promise<AuthResponse> {
     return this.respond(res, await this.auth.login(body, req.get('user-agent')));
+  }
+
+  @Public()
+  @Throttle(FORGOT_LIMIT)
+  @Post('forgot-password')
+  @HttpCode(204)
+  @ApiOperation({
+    summary: 'Envia o link de redefinição para o e-mail da conta (mesma resposta exista ou não)',
+  })
+  @ApiBody({ schema: openApiSchema(forgotPasswordSchema) })
+  forgotPassword(
+    @Body(new ZodValidationPipe(forgotPasswordSchema)) body: ForgotPasswordInput,
+    @Req() req: Request,
+  ): Promise<void> {
+    return this.passwordReset.request(body.identifier, req.ip);
+  }
+
+  @Public()
+  @Throttle(RESET_LIMIT)
+  @Post('reset-password')
+  @HttpCode(204)
+  @ApiOperation({ summary: 'Define a nova senha pelo link e encerra todas as sessões' })
+  @ApiBody({ schema: openApiSchema(resetPasswordSchema) })
+  resetPassword(
+    @Body(new ZodValidationPipe(resetPasswordSchema)) body: ResetPasswordInput,
+  ): Promise<void> {
+    return this.passwordReset.reset(body);
+  }
+
+  @Public()
+  @Throttle(RESET_LIMIT)
+  @Post('verify-email')
+  @HttpCode(204)
+  @ApiOperation({ summary: 'Confirma o e-mail pelo link enviado' })
+  @ApiBody({ schema: openApiSchema(verifyEmailSchema) })
+  verifyEmail(
+    @Body(new ZodValidationPipe(verifyEmailSchema)) body: VerifyEmailInput,
+  ): Promise<void> {
+    return this.emailVerification.verify(body.token);
+  }
+
+  @Throttle(RESEND_LIMIT)
+  @Post('verify-email/resend')
+  @HttpCode(204)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Reenvia o link de confirmação para o e-mail da conta' })
+  resendVerification(@CurrentUser() user: AuthUser): Promise<void> {
+    return this.emailVerification.send(user.id);
   }
 
   @Public()

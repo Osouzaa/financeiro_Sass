@@ -27,6 +27,7 @@ import { useAccounts } from '@/features/accounts/account-meta';
 import { categoryIcon } from '@/features/categories/category-icons';
 import { useInvoices } from '@/features/invoices/invoice-api';
 import { useRecurrences } from '@/features/recurrences/recurrence-api';
+import { WhatsappPrompt } from '@/features/settings/WhatsappPrompt';
 import { useTransactions } from '@/features/transactions/transaction-api';
 import { formatShortDate } from '@/lib/dates';
 
@@ -73,6 +74,8 @@ export function DashboardPage() {
           </Link>
         }
       />
+
+      <WhatsappPrompt />
 
       <section aria-label="Indicadores do mês" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard

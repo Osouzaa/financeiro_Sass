@@ -1,12 +1,16 @@
 import { BadRequestException, ConflictException } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
+import type { EmailVerificationService } from '../auth/email-verification.service';
 import type { PrismaService } from '../prisma/prisma.service';
 import { detectImageType } from './image-signature';
 import { UsersService } from './users.service';
 
 function setup() {
   const user = { findUnique: jest.fn(), update: jest.fn() };
-  const service = new UsersService({ user } as unknown as PrismaService);
+  const service = new UsersService(
+    { user } as unknown as PrismaService,
+    { send: jest.fn() } as unknown as EmailVerificationService,
+  );
   return { service, user };
 }
 

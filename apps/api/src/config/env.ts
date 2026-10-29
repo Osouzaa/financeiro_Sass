@@ -17,10 +17,31 @@ export const envSchema = z
     REFRESH_TOKEN_TTL_DAYS: z.coerce.number().int().positive().default(30),
     COOKIE_SECURE: z.stringbool().default(false),
     COOKIE_SAME_SITE: z.enum(['lax', 'strict', 'none']).default('lax'),
+    /** Endereço do front, usado nos links enviados por e-mail. */
+    APP_URL: z
+      .url({ error: 'APP_URL deve ser uma URL (ex.: https://app.exemplo.com)' })
+      .default('http://localhost:5173'),
+    /** Sem SMTP_HOST, em desenvolvimento os e-mails aparecem no terminal da API. */
+    SMTP_HOST: z.string().optional(),
+    SMTP_PORT: z.coerce.number().int().positive().default(587),
+    SMTP_SECURE: z.stringbool().default(false),
+    SMTP_USER: z.string().optional(),
+    SMTP_PASS: z.string().optional(),
+    MAIL_FROM: z.string().default('Financeiro <nao-responda@localhost>'),
+    /** Limite de tentativas por IP em login, cadastro e recuperação de senha. */
+    RATE_LIMIT_ENABLED: z.stringbool().default(true),
+    /** E-mails promovidos a super administrador ao subir a API ou ao se cadastrar. */
+    SUPER_ADMIN_EMAILS: z.string().default(''),
+    /** true atrás de proxy reverso (nginx, load balancer), para ler o IP real do cliente. */
+    TRUST_PROXY: z.stringbool().default(false),
   })
   .refine((env) => env.NODE_ENV !== 'production' || env.JWT_ACCESS_SECRET !== EXAMPLE_SECRET, {
     error: 'Defina um JWT_ACCESS_SECRET próprio em produção',
     path: ['JWT_ACCESS_SECRET'],
+  })
+  .refine((env) => env.NODE_ENV !== 'production' || Boolean(env.SMTP_HOST), {
+    error: 'Configure SMTP_HOST em produção: sem ele, ninguém recupera a senha',
+    path: ['SMTP_HOST'],
   });
 
 export type Env = z.infer<typeof envSchema>;

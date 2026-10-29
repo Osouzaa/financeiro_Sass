@@ -12,6 +12,7 @@ import {
   type AccountInputParsed,
 } from '@financeiro/shared';
 import { fromDbDate, toDbDate } from '../common/db-date';
+import { PlansService } from '../plans/plans.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { computeBalance, type TransactionTotal } from './balances';
 
@@ -45,7 +46,10 @@ type AccountRow = {
 
 @Injectable()
 export class AccountsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly plans: PlansService,
+  ) {}
 
   async list(userId: string, includeArchived = false): Promise<AccountDto[]> {
     const accounts = await this.prisma.account.findMany({
@@ -64,6 +68,7 @@ export class AccountsService {
   }
 
   async create(userId: string, input: AccountInputParsed): Promise<AccountDto> {
+    await this.assertPlanAllows(userId, input.type);
     await this.assertPaymentAccount(userId, input);
     const created = await this.prisma.account.create({
       data: { userId, ...this.toData(input) },
@@ -93,7 +98,9 @@ export class AccountsService {
   }
 
   async setArchived(userId: string, id: string, archived: boolean): Promise<AccountDto> {
-    await this.findOwned(userId, id);
+    const current = await this.findOwned(userId, id);
+    // Reativar conta arquivada também conta no limite do plano
+    if (!archived && current.archived) await this.assertPlanAllows(userId, current.type);
     await this.prisma.account.update({ where: { id }, data: { archived } });
     return this.get(userId, id);
   }
@@ -113,6 +120,21 @@ export class AccountsService {
       );
     }
     await this.prisma.account.delete({ where: { id } });
+  }
+
+  /** Contas e cartões ativos contam separado no limite do plano. */
+  private async assertPlanAllows(userId: string, type: string): Promise<void> {
+    const isCard = type === AccountType.CREDIT_CARD;
+    const active = await this.prisma.account.count({
+      where: {
+        userId,
+        archived: false,
+        ...(isCard
+          ? { type: AccountType.CREDIT_CARD }
+          : { NOT: { type: AccountType.CREDIT_CARD } }),
+      },
+    });
+    await this.plans.assertWithin(userId, isCard ? 'maxCards' : 'maxAccounts', active);
   }
 
   private async findOwned(userId: string, id: string): Promise<AccountRow> {

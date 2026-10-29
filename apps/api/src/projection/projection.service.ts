@@ -14,6 +14,7 @@ import { AccountsService } from '../accounts/accounts.service';
 import { fromDbDate, toDbDate } from '../common/db-date';
 import { InvoicesService } from '../invoices/invoices.service';
 import { fieldError } from '../ledger/entry-rules';
+import { PlansService } from '../plans/plans.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { RecurrencesService } from '../recurrences/recurrences.service';
 import { buildProjection } from './projection-math';
@@ -28,6 +29,7 @@ export class ProjectionService {
     private readonly accounts: AccountsService,
     private readonly invoices: InvoicesService,
     private readonly recurrences: RecurrencesService,
+    private readonly plans: PlansService,
   ) {}
 
   /**
@@ -39,6 +41,7 @@ export class ProjectionService {
    */
   async project(userId: string, query: ProjectionQuery): Promise<ProjectionDto> {
     const today = todayIso();
+    await this.plans.assertProjectionDays(userId, query.days);
     const until = addDays(today, query.days);
     await this.recurrences.ensureGenerated(userId, until);
 

@@ -13,6 +13,7 @@ import {
 } from '@financeiro/shared';
 import { toDbDate } from '../common/db-date';
 import { fieldError } from '../ledger/entry-rules';
+import { PlansService } from '../plans/plans.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { RecurrencesService } from '../recurrences/recurrences.service';
 
@@ -23,6 +24,7 @@ export class BudgetsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly recurrences: RecurrencesService,
+    private readonly plans: PlansService,
   ) {}
 
   /**
@@ -141,6 +143,18 @@ export class BudgetsService {
     }
     if (category.archived) throw fieldError('categoryId', 'Esta categoria está arquivada');
 
+    // Só um limite novo conta; trocar o valor de um existente não
+    const [exists, inMonth] = await Promise.all([
+      this.prisma.budget.findUnique({
+        where: {
+          userId_categoryId_month: { userId, categoryId: input.categoryId, month: input.month },
+        },
+        select: { id: true },
+      }),
+      this.prisma.budget.count({ where: { userId, month: input.month } }),
+    ]);
+    if (!exists) await this.plans.assertWithin(userId, 'maxBudgets', inMonth);
+
     await this.prisma.budget.upsert({
       where: {
         userId_categoryId_month: { userId, categoryId: input.categoryId, month: input.month },
@@ -180,6 +194,7 @@ export class BudgetsService {
     const taken = new Set(target.map((budget) => budget.categoryId));
     const missing = source.filter((budget) => !taken.has(budget.categoryId));
     if (missing.length) {
+      await this.plans.assertWithin(userId, 'maxBudgets', target.length, missing.length);
       await this.prisma.budget.createMany({
         data: missing.map((budget) => ({
           userId,
